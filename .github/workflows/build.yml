@@ -54,7 +54,12 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
-
+          
+      - name: Copy configs to dist
+        run: |
+          mkdir -p dist/configs
+          cp configs/*.json dist/configs/
+          ls -la dist/configs/  # 确认文件存在
 
   deploy:
     environment:
