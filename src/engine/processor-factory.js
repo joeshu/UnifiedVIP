@@ -1,7 +1,3 @@
-// ==========================================
-// 处理器工厂 - 创建各类处理器
-// ==========================================
-
 function createProcessorFactory(requestId) {
   return {
     setFields: (params) => (obj, env) => {
