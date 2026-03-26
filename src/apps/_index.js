@@ -322,8 +322,8 @@ const APP_REGISTRY = {
     description: "Keep健身VIP解锁",
     config: {
       regexReplacements: [
-        { pattern: "\\"memberStatus\\":\\d+", replacement: "\\"memberStatus\\":1", flags: "g" },
-        { pattern: "\\"hasPaid\\":\\w+", replacement: "\\"hasPaid\\":true", flags: "g" }
+        { pattern: '"memberStatus":\\d+', replacement: '"memberStatus":1', flags: "g" },
+        { pattern: '"hasPaid":\\w+', replacement: '"hasPaid":true', flags: "g" }
       ]
     }
   },
@@ -365,7 +365,7 @@ const APP_REGISTRY = {
     config: {
       htmlReplacements: [
         {
-          pattern: "<div[^>]*class=\\"[^\\"]*wwads[^\\"]*\\"[^>]*>[\\s\\S]*?<\\/div>",
+          pattern: '<div[^>]*class="[^"]*wwads[^"]*"[^>]*>[\\s\\S]*?<\\/div>',
           replacement: "",
           flags: "gi"
         }
