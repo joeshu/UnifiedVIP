@@ -18,25 +18,32 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          
+
       - name: Install dependencies
         run: npm install
-        
+
       - name: Build
         run: npm run build
 
+      # 修复：将 Copy configs 步骤移到 Upload artifact 之前
+      - name: Copy configs to dist
+        run: |
+          mkdir -p dist/configs
+          cp configs/*.json dist/configs/
+          ls -la dist/configs/
+
       - name: List dist files
         run: ls -la dist/
-        
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -46,22 +53,15 @@ jobs:
             dist/*.conf
             dist/configs/*.json
           retention-days: 7
-        
-      - name: Copy configs to dist
-        run: |
-          mkdir -p dist/configs
-          cp configs/*.json dist/configs/
-          ls -la dist/configs/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
-        
+
       - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
-          
-      
+
   deploy:
     environment:
       name: github-pages
