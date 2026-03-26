@@ -66,11 +66,12 @@ const META = { name: 'UnifiedVIP', version: '${manifest.version}-Lazy' };`;
 // 生成独立的 rewrite.conf 订阅文件
 function generateRewriteConf() {
   const hostnames = generateHostnames();
+  const remoteBase = 'https://joeshu.github.io/UnifiedVIP';
   
   let conf = `# Unified VIP Unlock Manager v22
 # 构建时间: ${new Date().toISOString()}
 # APP数量: ${Object.keys(APP_REGISTRY).length}
-# 订阅地址: https://joeshu.github.io/UnifiedVIP/rewrite.conf
+# 订阅地址: ${remoteBase}/rewrite.conf
 
 [rewrite_local]
 
@@ -79,7 +80,7 @@ function generateRewriteConf() {
   // 生成每条rewrite规则
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     conf += `# ${cfg.name}\n`;
-    conf += `${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+    conf += `${cfg.urlPattern} url script-response-body ${remoteBase}/Unified_VIP_Unlock_Manager_v22.js\n\n`;
   }
   
   conf += `[mitm]\n`;
