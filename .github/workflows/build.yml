@@ -26,13 +26,19 @@ jobs:
         
       - name: Build
         run: npm run build
-        
+
+
+      - name: Copy configs to dist
+        run: |
+          mkdir -p dist/configs
+          cp configs/*.json dist/configs/
+          
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          destination_dir: .
+          destination_dir: UnifiedVIP
           keep_files: true
           
       - name: Upload configs artifact
@@ -40,3 +46,4 @@ jobs:
         with:
           name: configs
           path: configs/*.json
+
