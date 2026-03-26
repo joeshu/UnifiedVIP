@@ -1,5 +1,4 @@
 // scripts/build.js
-// 构建脚本 - 生成主脚本、rewrite.conf 和 configs/*.json
 
 const fs = require('fs');
 const path = require('path');
@@ -16,13 +15,12 @@ const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const CONFIGS_DIR = path.join(__dirname, '../configs');
 
-// 加载核心模块并移除 CommonJS 导出
 function loadModule(filename) {
   const content = fs.readFileSync(path.join(SRC_DIR, filename), 'utf8');
   return content.replace(/\/\/ CommonJS导出[\s\S]*$/, '').trim();
 }
 
-// 生成单行压缩 Manifest（字段名完整）
+// 生成单行压缩 Manifest
 function generateManifestOneLine() {
   const configs = {};
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
@@ -44,10 +42,15 @@ function generateManifestOneLine() {
   return JSON.stringify(manifest);
 }
 
-// 生成精简头部（保留原脚本格式，DEBUG开启）
+// 生成精简头部（无 [rewrite_local] 和 [mitm]）
+ //* [rewrite_local]
+//${generateRewriteComments()}
+// * 
+ //* [mitm]
+ //* hostname = ${hostnames.join(', ')}
+ //*/
+
 function generateHeaderMinified() {
-  const hostnames = generateHostnames();
-  
   return `/*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0-Lazy
@@ -55,11 +58,7 @@ function generateHeaderMinified() {
  * APP数量: ${Object.keys(APP_REGISTRY).length}
  * ==========================================
  * 
- * [rewrite_local]
-${generateRewriteComments()}
- * 
- * [mitm]
- * hostname = ${hostnames.join(', ')}
+ * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
  */
 
 'use strict';
@@ -124,15 +123,14 @@ function generatePrefixIndexMultiLine() {
   
   lines.push('};');
   
-  // findByPrefix 函数（单行压缩）
   lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
   
   return lines.join('\n');
 }
 
-// 生成 rewrite.conf
+// 生成 rewrite.conf（完整的 hostname）
 function generateRewriteConf() {
-  const hostnames = generateHostnames();
+  const hostnames = generateFullHostnames();
   
   let conf = `# Unified VIP Unlock Manager v22
 # 构建时间: ${new Date().toISOString()}
@@ -150,6 +148,57 @@ function generateRewriteConf() {
   conf += `[mitm]\nhostname = ${hostnames.join(', ')}\n`;
   
   return conf;
+}
+
+// 完整的 hostname 列表（对比原脚本）
+function generateFullHostnames() {
+  return [
+    '59.82.99.78',
+    '*.ipalfish.com',
+    'service.hhdd.com',
+    'apis.lifeweek.com.cn',
+    'fluxapi.vvebo.vip',
+    'res5.haotgame.com',
+    'jsq.mingcalc.cn',
+    'theater-api.sylangyue.xyz',
+    'api.iappdaily.com',
+    'api2.tophub.today',
+    'api2.tophub.app',
+    'api3.tophub.xyz',
+    'api3.tophub.today',
+    'api3.tophub.app',
+    'tophub.tophubdata.com',
+    'tophub2.tophubdata.com',
+    'tophub.idaily.today',
+    'tophub2.idaily.today',
+    'tophub.remai.today',
+    'tophub.iappdaiy.com',
+    'tophub.ipadown.com',
+    'service.gpstool.com',
+    'mapi.kouyuxingqiu.com',
+    'ss.landintheair.com',
+    '*.v2ex.com',
+    'apis.folidaymall.com',
+    'gateway-api.yizhilive.com',
+    'pagead*.googlesyndication.com',
+    'api.gotokeep.com',
+    'kit.gotokeep.com',
+    '*.gotokeep.*',
+    '120.53.74.*',
+    '162.14.5.*',
+    '42.187.199.*',
+    '101.42.124.*',
+    'javelin.mandrillvr.com',
+    'api.banxueketang.com',
+    'yzy0916.*.com',
+    'yz1018.*.com',
+    'yz250907.*.com',
+    'yz0320.*.com',
+    'cfvip.*.com',
+    'yr-game-api.feigo.fun',
+    'star.jvplay.cn',
+    'iotpservice.smartont.net'
+  ].sort();
 }
 
 // 主构建流程
@@ -287,15 +336,13 @@ main();
     fs.mkdirSync(DIST_DIR, { recursive: true });
   }
   
-  // 写入主脚本
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
   fs.writeFileSync(outputPath, fullScript);
   
-  // 写入 rewrite.conf
   const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
   fs.writeFileSync(rewritePath, generateRewriteConf());
   
-  // 统计信息
+  // 统计
   const stats = fs.statSync(outputPath);
   const rewriteStats = fs.statSync(rewritePath);
   
@@ -304,17 +351,7 @@ main();
   console.log(`   📋 rewrite.conf (${(rewriteStats.size/1024).toFixed(2)} KB)`);
   console.log(`   📦 configs/*.json (${Object.keys(allConfigs).length}个)`);
   
-  console.log(`\n📋 APP列表:`);
-  Object.entries(APP_REGISTRY).forEach(([id, cfg], i) => {
-    const icons = {json:'📦',regex:'🔍',forward:'➡️',remote:'🌐',game:'🎮',hybrid:'🔀',html:'📄'};
-    console.log(`   ${String(i+1).padStart(2)}. ${icons[cfg.mode]||'⚙️'} ${id.padEnd(12)} ${cfg.name}`);
-  });
-  
-  console.log(`\n🚀 发布:`);
-  console.log(`   npm run deploy  # 推送到 GitHub Pages`);
-  console.log(`\n📱 使用:`);
-  console.log(`   订阅: https://joeshu.github.io/UnifiedVIP/rewrite.conf`);
+  console.log(`\n🚀 发布: npm run deploy`);
 }
 
-// 运行构建
 build();
