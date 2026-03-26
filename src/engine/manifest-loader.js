@@ -4,50 +4,12 @@ class SimpleManifestLoader {
     this._urlCacheKey = 'url_match_v22';
     this._regexCache = new Map();
     
-    this._prefixIndex = {
-      exact: {
-        'apis.lifeweek.com.cn': ['slzd'],
-        'fluxapi.vvebo.vip': ['vvebo'],
-        'api.iappdaily.com': ['iappdaily'],
-        'service.gpstool.com': ['gps'],
-        'picturebook.ipalfish.com': ['ipalfish'],
-        'service.hhdd.com': ['kada'],
-        'theater-api.sylangyue.xyz': ['sylangyue'],
-        'iotpservice.smartont.net': ['wohome'],
-        'jsq.mingcalc.cn': ['mingcalc']
-      },
-      suffix: {
-        'tophub.xyz': ['tophub'],
-        'tophub.today': ['tophub'],
-        'tophub.app': ['tophub'],
-        'tophubdata.com': ['tophub'],
-        'idaily.today': ['tophub'],
-        'remai.today': ['tophub'],
-        'iappdaiy.com': ['tophub'],
-        'ipadown.com': ['tophub'],
-        'v2ex.com': ['v2ex'],
-        'gotokeep.com': ['keep'],
-        'mandrillvr.com': ['bqwz'],
-        'banxueketang.com': ['bxkt'],
-        'feigo.fun': ['cyljy'],
-        'jvplay.cn': ['xjsm'],
-        'haotgame.com': ['qmjyzc'],
-        'folidaymall.com': ['foday'],
-        'yizhilive.com': ['qiujingapp'],
-        'landintheair.com': ['mhlz'],
-        'kouyuxingqiu.com': ['kyxq']
-      },
-      keyword: {
-        'tophub': ['tophub'],
-        'v2ex': ['v2ex'],
-        'keep': ['keep'],
-        'yz': ['tv'],
-        'cfvip': ['tv']
-      }
-    };
+    // 🔥 自动生成前缀索引
+    this._prefixIndex = this._generatePrefixIndex(BUILTIN_MANIFEST.configs);
     
     this._lazyConfigs = BUILTIN_MANIFEST.configs;
     
+    // 恢复缓存
     if (Platform.isQX) {
       const saved = $prefs.valueForKey(this._urlCacheKey);
       if (saved) {
@@ -60,6 +22,62 @@ class SimpleManifestLoader {
         } catch (e) {}
       }
     }
+  }
+
+  // 🔥 自动生成前缀索引
+  _generatePrefixIndex(configs) {
+    const index = {
+      exact: {},
+      suffix: {},
+      keyword: {}
+    };
+
+    for (const [id, cfg] of Object.entries(configs)) {
+      const pattern = cfg.urlPattern;
+      
+      // 提取域名
+      const domainMatches = pattern.match(/[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/gi);
+      if (!domainMatches) continue;
+
+      for (const domain of domainMatches) {
+        const parts = domain.toLowerCase().split('.');
+        
+        if (parts.length >= 3) {
+          // 三级域名 → exact
+          index.exact[domain] = [id];
+          // 二级域名 → suffix
+          const suffix = parts.slice(-2).join('.');
+          if (!index.suffix[suffix]) {
+            index.suffix[suffix] = [];
+          }
+          if (!index.suffix[suffix].includes(id)) {
+            index.suffix[suffix].push(id);
+          }
+        } else {
+          // 二级域名 → suffix
+          if (!index.suffix[domain]) {
+            index.suffix[domain] = [];
+          }
+          if (!index.suffix[domain].includes(id)) {
+            index.suffix[domain].push(id);
+          }
+        }
+        
+        // 提取关键字（去掉通用词）
+        const keywords = parts.filter(p => 
+          p.length >= 4 && 
+          !['api', 'www', 'm', 'mobile', 'app', 'v1', 'v2', 'v3', 'service'].includes(p)
+        );
+        
+        for (const kw of keywords) {
+          if (!index.keyword[kw] && kw.length >= 4) {
+            index.keyword[kw] = [id];
+          }
+        }
+      }
+    }
+
+    return index;
   }
 
   _findByPrefix(hostname) {
