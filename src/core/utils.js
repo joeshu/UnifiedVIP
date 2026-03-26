@@ -1,3 +1,6 @@
+// src/core/utils.js
+// 工具函数集
+
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
     try { return JSON.parse(str); } catch (e) { return defaultVal; }
@@ -68,10 +71,25 @@ const Utils = {
       const value = Utils.getPath(obj, path.trim());
       return value !== undefined ? value : match;
     });
+  },
+
+  // 新增：格式化对象为字符串（用于 notify）
+  formatObject: (obj, separator = '\\n') => {
+    if (typeof obj !== 'object' || obj === null) return String(obj);
+    if (Array.isArray(obj)) {
+      return obj.map(item => Utils.formatObject(item, separator)).join(separator);
+    }
+    return Object.entries(obj)
+      .map(([k, v]) => {
+        if (typeof v === 'object' && v !== null) {
+          return `${k}: ${Utils.formatObject(v, separator)}`;
+        }
+        return `${k}: ${v}`;
+      })
+      .join(separator);
   }
 };
 
-// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { Utils };
 }
