@@ -1,6 +1,57 @@
 // src/engine/vip-engine.js
-// VIP引擎 - 使用预编译的规则
+// VIP引擎 - 先定义 Environment，再定义 VipEngine
 
+// ==========================================
+// Environment 类
+// ==========================================
+class Environment {
+  constructor(name) {
+    this.name = name;
+    this.isQX = typeof Platform !== 'undefined' ? Platform.isQX : false;
+    this.isSurge = typeof Platform !== 'undefined' ? Platform.isSurge : false;
+    this.isLoon = typeof Platform !== 'undefined' ? Platform.isLoon : false;
+    this.isStash = typeof Platform !== 'undefined' ? Platform.isStash : false;
+
+    this.response = (typeof $response !== 'undefined') ? $response : {};
+    this.request = (typeof $request !== 'undefined') ? $request : {};
+
+    if (!this.request.url && this.response && this.response.request) {
+      this.request = this.response.request;
+    }
+  }
+
+  getUrl() {
+    let url = (this.response && this.response.url) || (this.request && this.request.url) || '';
+    if (this.isQX && typeof $request === 'string') {
+      url = $request;
+    }
+    return url.toString();
+  }
+
+  getBody() {
+    return (this.response && this.response.body) || '';
+  }
+
+  getRequestHeaders() {
+    return (this.request && this.request.headers) || {};
+  }
+
+  getRequestBody() {
+    return (this.request && this.request.body) || '';
+  }
+
+  done(result) {
+    if (typeof $done === 'function') {
+      $done(result);
+    } else {
+      console.log('[DONE]', result);
+    }
+  }
+}
+
+// ==========================================
+// VipEngine 类
+// ==========================================
 class VipEngine {
   constructor(env, requestId) {
     this.env = env;
@@ -37,7 +88,72 @@ class VipEngine {
     }
   }
 
-  // ... _processForward 和 _processRemote 保持不变 ...
+  async _processForward(config) {
+    const options = {
+      url: config.forwardUrl,
+      method: config.method || 'POST',
+      headers: config.forwardHeaders || {},
+      body: this.env.getRequestBody(),
+      timeout: config.timeout || 10000
+    };
+
+    Logger.info('Forward', `Forwarding to ${options.url}`);
+
+    try {
+      const response = await HTTP.post(options);
+      const statusCode = response.statusCode || 200;
+      const statusText = (config.statusTexts || {})[String(statusCode)] || 'OK';
+
+      return {
+        status: `HTTP/1.1 ${statusCode} ${statusText}`,
+        headers: config.responseHeaders || {},
+        body: response.body
+      };
+    } catch (e) {
+      Logger.error('Forward', `Failed: ${e.message}`);
+      return {
+        status: 'HTTP/1.1 500 Internal Server Error',
+        headers: config.responseHeaders || {},
+        body: Utils.safeJsonStringify({ error: e.message })
+      };
+    }
+  }
+
+  async _processRemote(config) {
+    if (!config.remoteUrl) {
+      Logger.error('Remote', 'Missing remoteUrl');
+      return {};
+    }
+
+    try {
+      const response = await HTTP.get(config.remoteUrl, config.timeout || 10000);
+      
+      if (response.statusCode !== 200) {
+        return {};
+      }
+
+      if (config.validateJson !== false) {
+        try {
+          JSON.parse(response.body);
+        } catch (e) {
+          return {};
+        }
+      }
+
+      const headers = {};
+      if (config.forceHeaders) {
+        Object.assign(headers, config.forceHeaders);
+      }
+      if (!headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json; charset=utf-8';
+      }
+
+      return { headers, body: response.body };
+    } catch (e) {
+      Logger.error('Remote', `Error: ${e.message}`);
+      return {};
+    }
+  }
 
   _processJson(body, config) {
     let obj = Utils.safeJsonParse(body);
@@ -59,15 +175,12 @@ class VipEngine {
     return { body: Utils.safeJsonStringify(obj) };
   }
 
-  // 修复：使用预编译的 _regexReplacements
   _processRegex(body, config) {
     let modified = body;
-    // 优先使用预编译的规则
     const replacements = config._regexReplacements || config.regexReplacements || [];
     
     for (const rule of replacements) {
       try {
-        // 预编译的 rule.pattern 已经是 RegExp 对象
         const regex = rule.pattern instanceof RegExp ? rule.pattern : RegexPool.get(rule.pattern, rule.flags || 'g');
         modified = modified.replace(regex, rule.replacement);
       } catch (e) {}
@@ -76,15 +189,12 @@ class VipEngine {
     return { body: modified };
   }
 
-  // 修复：使用预编译的 _gameResources
   _processGame(body, config) {
     let modified = body;
-    // 优先使用预编译的规则
     const resources = config._gameResources || config.gameResources || [];
     
     for (const res of resources) {
       try {
-        // 预编译的 res.pattern 已经是 RegExp 对象
         const regex = res.pattern instanceof RegExp ? res.pattern : RegexPool.get(`"${res.field}":\\d+`, 'g');
         modified = modified.replace(regex, `"${res.field}":${res.value}`);
       } catch (e) {}
@@ -96,17 +206,15 @@ class VipEngine {
   _processHybrid(body, config) {
     let result = this._processJson(body, config);
     
-    if (config.regexReplacements || config._regexReplacements) {
+    if (config._regexReplacements || config.regexReplacements) {
       result = this._processRegex(result.body, config);
     }
     
     return result;
   }
 
-  // 修复：使用预编译的 _htmlReplacements
   _processHtml(body, config) {
     let modified = body;
-    // 优先使用预编译的规则
     const replacements = config._htmlReplacements || config.htmlReplacements || [];
     
     for (const rule of replacements) {
