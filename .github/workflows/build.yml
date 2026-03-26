@@ -33,7 +33,13 @@ jobs:
         
       - name: Build
         run: npm run build
-        
+      
+      - name: Copy configs to dist
+        run: |
+          mkdir -p dist/configs
+          cp configs/*.json dist/configs/
+          ls -la dist/configs/
+
       - name: List dist files
         run: ls -la dist/
         
@@ -55,12 +61,7 @@ jobs:
         with:
           path: ./dist
           
-      - name: Copy configs to dist
-        run: |
-          mkdir -p dist/configs
-          cp configs/*.json dist/configs/
-          ls -la dist/configs/ 
-
+      
   deploy:
     environment:
       name: github-pages
