@@ -1,7 +1,3 @@
-// ==========================================
-// 平台检测模块 - 支持QX/Surge/Loon/Stash
-// ==========================================
-
 const Platform = {
   isQX: typeof $task !== 'undefined',
   isLoon: typeof $loon !== 'undefined',
