@@ -101,7 +101,7 @@ if (typeof console === 'undefined') {
 
 // 配置
 const CONFIG = {
-  REMOTE_BASE: 'https://你的用户名.github.io/vip-unlock-configs',
+  REMOTE_BASE: 'https://joeshu.github.io/UnifiedVIP',
   CONFIG_CACHE_TTL: 24 * 60 * 60 * 1000,
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
