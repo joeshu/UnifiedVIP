@@ -1,6 +1,3 @@
-// src/engine/regex-pool.js
-// 正则缓存池 - LRU淘汰
-
 const RegexPool = (() => {
   const cache = new Map();
   const MAX_SIZE = 50;
