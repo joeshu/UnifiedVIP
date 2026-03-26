@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p dist/configs
           cp configs/*.json dist/configs/
-          ls -la dist/configs/  # 确认文件存在
+          ls -la dist/configs/ 
 
   deploy:
     environment:
