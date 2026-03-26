@@ -1,5 +1,7 @@
+#!/usr/bin/env node
+
 // scripts/build.js
-// 构建脚本 - 生成主脚本、rewrite.conf 和 configs/*.json
+// 构建脚本 - 从 APP_REGISTRY(urlPattern) + 本地 configs/*.json 生成完整配置
 
 const fs = require('fs');
 const path = require('path');
@@ -15,19 +17,18 @@ const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const CONFIGS_DIR = path.join(__dirname, '../configs');
 
+// 加载核心模块并移除 CommonJS 导出
 function loadModule(filename) {
   const content = fs.readFileSync(path.join(SRC_DIR, filename), 'utf8');
   return content.replace(/\/\/ CommonJS导出[\s\S]*$/, '').trim();
 }
 
-// 生成单行压缩 Manifest
+// 生成单行压缩 Manifest（只包含匹配必需的元信息）
 function generateManifestOneLine() {
   const configs = {};
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     configs[id] = {
-      name: cfg.name,
       urlPattern: cfg.urlPattern,
-      mode: cfg.mode,
       configFile: `${id}.json`
     };
   }
@@ -42,7 +43,7 @@ function generateManifestOneLine() {
   return JSON.stringify(manifest);
 }
 
-// 生成精简头部（无 [rewrite_local] 和 [mitm]）
+// 生成精简头部（无 [rewrite_local] 和 [mitm]，DEBUG开启）
 function generateHeaderMinified() {
   return `/*
  * ==========================================
@@ -80,6 +81,7 @@ function generatePrefixIndexMultiLine() {
   
   const lines = ['const PREFIX_INDEX = {'];
   
+  // exact
   lines.push('  exact: {');
   const exactEntries = Object.entries(index.exact);
   for (let i = 0; i < exactEntries.length; i++) {
@@ -89,6 +91,7 @@ function generatePrefixIndexMultiLine() {
   }
   lines.push('  },');
   
+  // suffix
   lines.push('  suffix: {');
   const suffixEntries = Object.entries(index.suffix);
   for (let i = 0; i < suffixEntries.length; i++) {
@@ -98,6 +101,7 @@ function generatePrefixIndexMultiLine() {
   }
   lines.push('  },');
   
+  // keyword
   if (index.keyword && Object.keys(index.keyword).length > 0) {
     lines.push('  keyword: {');
     const kwEntries = Object.entries(index.keyword);
@@ -113,6 +117,7 @@ function generatePrefixIndexMultiLine() {
   
   lines.push('};');
   
+  // findByPrefix 函数（单行压缩）
   lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
   
   return lines.join('\n');
@@ -120,6 +125,7 @@ function generatePrefixIndexMultiLine() {
 
 // 生成 rewrite.conf（完整的 hostname）
 function generateRewriteConf() {
+  // 完整的 hostname 列表（与原脚本一致）
   const hostnames = [
     '59.82.99.78',
     '*.ipalfish.com',
@@ -177,8 +183,12 @@ function generateRewriteConf() {
 
 `;
   
+  // 从合并后的配置获取 name
+  const allConfigs = getAllConfigs();
+  
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
-    conf += `# ${cfg.name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+    const name = allConfigs[id]?.name || id;
+    conf += `# ${name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
   }
   
   conf += `[mitm]\nhostname = ${hostnames.join(', ')}\n`;
@@ -190,42 +200,65 @@ function generateRewriteConf() {
 function build() {
   console.log('🔨 构建 UnifiedVIP v22\n');
   
-  // 步骤1：生成 configs/*.json
-  console.log('📦 步骤1: 生成 configs/*.json...');
-  const allConfigs = getAllConfigs();
+  // 步骤1：从 APP_REGISTRY + 本地 configs/*.json 读取完整配置
+  console.log('📦 步骤1: 读取并合并配置...');
+  let allConfigs;
+  try {
+    allConfigs = getAllConfigs(); // 合并 urlPattern + 本地JSON
+    console.log(`   ✅ 成功读取 ${Object.keys(allConfigs).length} 个配置`);
+  } catch (e) {
+    console.error(`   ❌ 读取配置失败: ${e.message}`);
+    process.exit(1);
+  }
   
+  // 步骤2：确保目录存在并写入 configs
+  console.log('📦 步骤2: 生成 dist/configs/*.json...');
+  
+  // 确保根目录 configs/ 存在（源配置）
   if (!fs.existsSync(CONFIGS_DIR)) {
     fs.mkdirSync(CONFIGS_DIR, { recursive: true });
+    console.log('   ℹ️ 创建 configs/ 目录');
   }
   
+  // 确保 dist/ 和 dist/configs/ 存在（部署用）
+  if (!fs.existsSync(DIST_DIR)) {
+    fs.mkdirSync(DIST_DIR, { recursive: true });
+  }
+  const distConfigsDir = path.join(DIST_DIR, 'configs');
+  if (!fs.existsSync(distConfigsDir)) {
+    fs.mkdirSync(distConfigsDir, { recursive: true });
+  }
+  
+  // 写入所有配置
+  let count = 0;
   for (const [appId, config] of Object.entries(allConfigs)) {
-    fs.writeFileSync(
-      path.join(CONFIGS_DIR, `${appId}.json`), 
-      JSON.stringify(config, null, 2)
-    );
+    const jsonContent = JSON.stringify(config, null, 2);
+    
+    // 写入根目录 configs/（保留备份）
+    fs.writeFileSync(path.join(CONFIGS_DIR, `${appId}.json`), jsonContent);
+    
+    // 写入 dist/configs/（用于部署）
+    fs.writeFileSync(path.join(distConfigsDir, `${appId}.json`), jsonContent);
+    count++;
   }
-  console.log(`   ✅ 生成 ${Object.keys(allConfigs).length} 个配置文件`);
+  console.log(`   ✅ 生成 ${count} 个配置文件`);
   
-  // 步骤2：加载核心模块
-  console.log('📦 步骤2: 加载核心模块...');
+  // 步骤3：加载核心模块
+  console.log('📦 步骤3: 加载核心模块...');
   const platform = loadModule('core/platform.js');
   const logger = loadModule('core/logger.js');
   const storage = loadModule('core/storage.js');
   const http = loadModule('core/http.js');
   const utils = loadModule('core/utils.js');
   const regexPool = loadModule('engine/regex-pool.js');
-  
-  // 注意顺序：processor-factory 依赖 regexPool
   const processorFactory = loadModule('engine/processor-factory.js');
   const compiler = loadModule('engine/compiler.js');
   const manifestLoader = loadModule('engine/manifest-loader.js');
   const configLoader = loadModule('engine/config-loader.js');
-  
-  // 关键：vip-engine 必须在 main 之前，包含 Environment 定义
   const vipEngine = loadModule('engine/vip-engine.js');
 
-  // 步骤3：组装主脚本
-  console.log('📦 步骤3: 组装主脚本...');
+  // 步骤4：组装主脚本
+  console.log('📦 步骤4: 组装主脚本...');
   const manifestStr = generateManifestOneLine();
   const prefixCode = generatePrefixIndexMultiLine();
   
@@ -323,44 +356,35 @@ async function main(){
 main();
 `;
 
-  // 步骤4：写入构建产物
-  if (!fs.existsSync(DIST_DIR)) {
-    fs.mkdirSync(DIST_DIR, { recursive: true });
-  }
+  // 步骤5：写入构建产物
+  console.log('📦 步骤5: 写入构建产物...');
   
   // 写入主脚本
-  fs.writeFileSync(
-    path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js'), 
-    fullScript
-  );
-  
-  // 复制 configs 到 dist/configs/
-  const distConfigsDir = path.join(DIST_DIR, 'configs');
-  if (!fs.existsSync(distConfigsDir)) {
-    fs.mkdirSync(distConfigsDir, { recursive: true });
-  }
-  
-  for (const appId of Object.keys(allConfigs)) {
-    fs.copyFileSync(
-      path.join(CONFIGS_DIR, `${appId}.json`),
-      path.join(distConfigsDir, `${appId}.json`)
-    );
-  }
+  const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
+  fs.writeFileSync(outputPath, fullScript);
   
   // 写入 rewrite.conf
-  fs.writeFileSync(
-    path.join(DIST_DIR, 'rewrite.conf'), 
-    generateRewriteConf()
-  );
+  const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
+  fs.writeFileSync(rewritePath, generateRewriteConf());
   
   // 统计
-  const stats = fs.statSync(path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js'));
+  const stats = fs.statSync(outputPath);
+  const rewriteStats = fs.statSync(rewritePath);
   
   console.log(`\n✅ 构建成功！`);
-  console.log(`   📄 dist/Unified_VIP_Unlock_Manager_v22.js (${(stats.size/1024).toFixed(2)} KB)`);
-  console.log(`   📋 dist/rewrite.conf`);
-  console.log(`   📦 dist/configs/*.json (${Object.keys(allConfigs).length}个)`);
-  console.log(`\n🚀 执行: npm run deploy`);
+  console.log(`   📄 Unified_VIP_Unlock_Manager_v22.js (${(stats.size/1024).toFixed(2)} KB)`);
+  console.log(`   📋 rewrite.conf (${(rewriteStats.size/1024).toFixed(2)} KB)`);
+  console.log(`   📦 configs/*.json (${count}个)`);
+  
+  console.log(`\n📋 APP列表:`);
+  Object.entries(allConfigs).forEach(([id, cfg], i) => {
+    const icons = {json:'📦',regex:'🔍',forward:'➡️',remote:'🌐',game:'🎮',hybrid:'🔀',html:'📄'};
+    console.log(`   ${String(i+1).padStart(2)}. ${icons[cfg.mode]||'⚙️'} ${id.padEnd(12)} ${cfg.name}`);
+  });
+  
+  console.log(`\n🚀 发布: npm run deploy`);
+  console.log(`   订阅: https://joeshu.github.io/UnifiedVIP/rewrite.conf`);
 }
 
+// 运行构建
 build();
