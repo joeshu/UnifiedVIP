@@ -185,22 +185,22 @@ const APP_REGISTRY = {
 
   // ==================== 10. 思朗月影视 ====================
   sylangyue: {
-    name: "思朗月影视",
-    urlPattern: "^https?:\\/\\/theater-api\\.sylangyue\\.xyz\\/api\\/user\\/info",
-    mode: "json",
-    priority: 10,
-    description: "思朗月影视VIP解锁",
-    config: {
-      processor: {
-        processor: "setFields",
-        params: {
-          fields: {
-            "data.vip": true,
-            "data.vipExpireTime": "2099-12-31 23:59:59"
-          }
-        }
+  name: "思朗月影视",
+  urlPattern: "^https?:\\/\\/theater-api\\.sylangyue\\.xyz\\/api\\/user\\/info",
+  mode: "json",
+  config: {
+    processor: "setFields",
+    params: {
+      fields: {
+        "data.vip.status": true,
+        "data.vip.expired_date": "2999-09-09",
+        "data.vip.expired_at": 99999999999999,
+        "data.login_way": true,
+        "data.beans": 999880
       }
     }
+  }
+
   },
 
   // ==================== 11. 明计算 ====================
