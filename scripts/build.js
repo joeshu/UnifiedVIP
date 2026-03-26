@@ -31,7 +31,7 @@ function build() {
   console.log(`✅ 生成 ${Object.keys(remoteConfigs).length} 个远程配置`);
 
   const rewriteRules = Object.entries(manifest.configs).map(([id, cfg]) => {
-    return `${cfg.urlPattern} url script-response-body https://joeshu.github.io/vip-unlock-configs/Unified_VIP_Unlock_Manager_v22.js`;
+    return `${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js`;
   });
   
   const rewriteContent = `# Unified VIP Unlock Manager v22.0.0
