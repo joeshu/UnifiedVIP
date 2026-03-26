@@ -1,7 +1,3 @@
-// ==========================================
-// 日志系统 - 分级控制
-// ==========================================
-
 const Logger = (() => {
   const isDebug = typeof CONFIG !== 'undefined' ? CONFIG.DEBUG === true : false;
   
