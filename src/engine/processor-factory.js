@@ -94,87 +94,58 @@ function createProcessorFactory(requestId) {
       return obj;
     },
 
-    // 修复：正确处理对象和数组类型的 notify
+    // 使用原脚本逻辑的 notify 处理器
     notify: (params) => (obj, env) => {
       const title = params.title || 'UnifiedVIP';
       let subtitle = params.subtitle || '';
       let message = params.message || '';
 
-      // 从字段读取 subtitle
       if (params.subtitleField) {
-        const fieldData = Utils.getPath(obj, params.subtitleField);
-        if (fieldData !== undefined) {
-          if (typeof fieldData === 'object') {
-            subtitle = JSON.stringify(fieldData);
-          } else {
-            subtitle = String(fieldData);
-          }
-        }
+        subtitle = Utils.getPath(obj, params.subtitleField) || subtitle;
       }
 
-      // 从字段读取 message（支持对象/数组）
-      if (params.messageField) {
+      // template 优先（原脚本逻辑）
+      if (params.template) {
+        message = params.template.replace(/\\{\\{(\\w+)\\}\\}/g, (match, key) => {
+          return Utils.getPath(obj, key) || match;
+        });
+      } else if (params.messageField) {
+        // 使用 formatObject 处理对象（关键修复）
         const fieldData = Utils.getPath(obj, params.messageField);
-        if (fieldData !== undefined) {
-          if (typeof fieldData === 'object' && fieldData !== null) {
-            // 数组类型
-            if (Array.isArray(fieldData)) {
-              const sep = params.separator || '\n';
-              const prefix = params.prefix || '';
-              const maxLen = params.maxLength || 400;
-              
-              message = fieldData.map(item => {
-                if (typeof item === 'object') {
-                  // 尝试提取常用字段，否则 JSON
-                  return item.text || item.content || item.name || JSON.stringify(item);
-                }
-                return String(item);
-              }).join(sep);
-              
-              // 添加前缀
-              if (prefix) {
-                message = prefix + message;
-              }
-              
-              // 截断超长
-              if (message.length > maxLen) {
-                message = message.substring(0, maxLen) + '...';
-              }
-            } else {
-              // 普通对象，尝试提取常用字段
-              if (fieldData.choices && Array.isArray(fieldData.choices)) {
-                message = fieldData.choices.join('\n');
-              } else if (fieldData.text) {
-                message = String(fieldData.text);
-              } else if (fieldData.content) {
-                message = String(fieldData.content);
-              } else if (fieldData.message) {
-                message = String(fieldData.message);
-              } else {
-                // 使用模板或 JSON
-                if (params.template) {
-                  message = Utils.resolveTemplate(params.template, fieldData);
-                } else {
-                  message = JSON.stringify(fieldData);
-                }
-              }
-            }
+        if (fieldData) {
+          if (typeof fieldData === 'object') {
+            message = Utils.formatObject(fieldData, params.separator || '\\n');
           } else {
             message = String(fieldData);
           }
         }
       }
 
-      // 发送通知
+      if (params.prefix) {
+        message = params.prefix + message;
+      }
+
+      const maxLen = params.maxLength || 500;
+      if (message.length > maxLen) {
+        message = message.substring(0, maxLen) + '...';
+      }
+
+      // 平台适配通知
       if (typeof Platform !== 'undefined') {
         if (Platform.isQX && typeof $notify !== 'undefined') {
           $notify(title, subtitle, message, params.options || {});
-        } else if (typeof $notification !== 'undefined') {
+        } else if (Platform.isLoon && typeof $notification !== 'undefined') {
+          const url = params.options && params.options['open-url'];
+          if (url) {
+            $notification.post(title, subtitle, message, url);
+          } else {
+            $notification.post(title, subtitle, message);
+          }
+        } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
           $notification.post(title, subtitle, message, params.options || {});
         }
       }
 
-      // 标记字段
       if (params.markField) {
         Utils.setPath(obj, params.markField, true);
       }
