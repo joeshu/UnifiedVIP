@@ -33,12 +33,6 @@ jobs:
         
       - name: Build
         run: npm run build
-      
-      - name: Copy configs to dist
-        run: |
-          mkdir -p dist/configs
-          cp configs/*.json dist/configs/
-          ls -la dist/configs/
 
       - name: List dist files
         run: ls -la dist/
@@ -52,7 +46,13 @@ jobs:
             dist/*.conf
             dist/configs/*.json
           retention-days: 7
-          
+        
+      - name: Copy configs to dist
+        run: |
+          mkdir -p dist/configs
+          cp configs/*.json dist/configs/
+          ls -la dist/configs/
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
         
