@@ -1,7 +1,3 @@
-// ==========================================
-// Manifest加载器 - 延迟加载+三级索引
-// ==========================================
-
 class SimpleManifestLoader {
   constructor(requestId) {
     this._requestId = requestId;
