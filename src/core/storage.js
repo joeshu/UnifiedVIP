@@ -1,7 +1,9 @@
+// src/core/storage.js
+// M3单键存储系统 - 修复返回格式
+
 const Storage = (() => {
   const KEY = 'vip_v22_data';
   
-  // QX存储接口
   const qx = {
     read: (k) => $prefs.valueForKey(k),
     write: (k, v) => $prefs.setValueForKey(v, k),
@@ -17,6 +19,7 @@ const Storage = (() => {
         const item = all[configId];
         const ttl = typeof CONFIG !== 'undefined' ? CONFIG.CONFIG_CACHE_TTL : 86400000;
         if (item && (Date.now() - item.t) < ttl) {
+          // 修复：返回 item.d（配置数据），不是整个 item
           return item.d;
         }
       } catch (e) {}
@@ -30,6 +33,7 @@ const Storage = (() => {
         try { all = JSON.parse(raw); } catch (e) {}
       }
 
+      // 存储结构：{v:版本, t:时间戳, d:数据}
       all[configId] = { 
         v: '1.0',
         t: Date.now(), 
@@ -46,9 +50,7 @@ const Storage = (() => {
           .slice(0, 3);
         all = Object.fromEntries(sorted);
         str = JSON.stringify(all);
-        if (typeof Logger !== 'undefined') {
-          Logger.info('Storage', 'Storage limit exceeded, kept recent 3 configs');
-        }
+        Logger.info('Storage', 'Storage limit exceeded, kept recent 3 configs');
       }
 
       qx.write(KEY, str);
@@ -60,7 +62,6 @@ const Storage = (() => {
   };
 })();
 
-// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { Storage };
 }
