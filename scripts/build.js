@@ -51,7 +51,7 @@ ${generateRewriteComments()}
 if (typeof console === 'undefined') { globalThis.console = { log: () => {} }; }
 
 const CONFIG = {
-  REMOTE_BASE: 'https://joeshu.github.io/vip-unlock-configs',
+  REMOTE_BASE: 'https://joeshu.github.io/UnifiedVIP/',
   CONFIG_CACHE_TTL: 24 * 60 * 60 * 1000,
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
@@ -70,7 +70,7 @@ function generateRewriteConf() {
   let conf = `# Unified VIP Unlock Manager v22
 # 构建时间: ${new Date().toISOString()}
 # APP数量: ${Object.keys(APP_REGISTRY).length}
-# 订阅地址: https://raw.githubusercontent.com/joeshu/vip-unlock-configs/refs/heads/main/dist/rewrite.conf
+# 订阅地址: https://joeshu.github.io/UnifiedVIP/rewrite.conf
 
 [rewrite_local]
 
@@ -79,7 +79,7 @@ function generateRewriteConf() {
   // 生成每条rewrite规则
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     conf += `# ${cfg.name}\n`;
-    conf += `${cfg.urlPattern} url script-response-body https://raw.githubusercontent.com/joeshu/vip-unlock-configs/refs/heads/main/dist/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+    conf += `${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
   }
   
   conf += `[mitm]\n`;
