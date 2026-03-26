@@ -61,7 +61,7 @@ function build() {
     }
 
     // 生成规则
-    const rule = `${cfg.urlPattern} url script-response-body https://你的用户名.github.io/vip-unlock-configs/Unified_VIP_Unlock_Manager_v22.js`;
+    const rule = `${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js`;
     rewriteRules.push(`# ${cfg.name}\n${rule}`);
   }
 
