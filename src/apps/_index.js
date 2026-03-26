@@ -217,8 +217,10 @@ const APP_REGISTRY = {
         processor: "setFields",
         params: {
           fields: {
-            "data.isVip": true,
-            "data.useCount": 999999
+          "des": "永久会员",
+        "result.Token": "328971a2f0b318910dbdf45a4442fc56",
+        "result.VipEnd": "2036-03-23",
+        "result.VipEndDes": "永久会员"
           }
         }
       }
