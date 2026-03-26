@@ -1,9 +1,15 @@
+// ==========================================
+// M3单键存储系统 - QX存储优化
+// ==========================================
+
 const Storage = (() => {
   const KEY = 'vip_v22_data';
   
+  // QX存储接口
   const qx = {
     read: (k) => $prefs.valueForKey(k),
-    write: (k, v) => $prefs.setValueForKey(v, k)
+    write: (k, v) => $prefs.setValueForKey(v, k),
+    remove: (k) => $prefs.removeValueForKey(k)
   };
 
   return {
@@ -13,33 +19,52 @@ const Storage = (() => {
       try {
         const all = JSON.parse(raw);
         const item = all[configId];
-        if (item && (Date.now() - item.t) < 24 * 60 * 60 * 1000) {
-          return JSON.stringify(item);
+        const ttl = typeof CONFIG !== 'undefined' ? CONFIG.CONFIG_CACHE_TTL : 86400000;
+        if (item && (Date.now() - item.t) < ttl) {
+          return item.d;
         }
       } catch (e) {}
       return null;
     },
-    
-    writeConfig: (configId, value) => {
+
+    writeConfig: (configId, data) => {
       let all = {};
       const raw = qx.read(KEY);
       if (raw) {
         try { all = JSON.parse(raw); } catch (e) {}
       }
-      
-      const parsed = JSON.parse(value);
-      all[configId] = { v: parsed.v, t: Date.now(), d: parsed.d };
-      
+
+      all[configId] = { 
+        v: '1.0',
+        t: Date.now(), 
+        d: data 
+      };
+
       let str = JSON.stringify(all);
-      
-      if (Platform.isQX && str.length > 500000) {
+      const maxSize = typeof Platform !== 'undefined' && Platform.isQX ? 500000 : Infinity;
+
+      // M3: 超限保护，保留最近3个
+      if (str.length > maxSize) {
         const sorted = Object.entries(all)
           .sort((a, b) => (b[1].t || 0) - (a[1].t || 0))
           .slice(0, 3);
-        str = JSON.stringify(Object.fromEntries(sorted));
+        all = Object.fromEntries(sorted);
+        str = JSON.stringify(all);
+        if (typeof Logger !== 'undefined') {
+          Logger.info('Storage', 'Storage limit exceeded, kept recent 3 configs');
+        }
       }
-      
+
       qx.write(KEY, str);
-    }
+    },
+
+    read: (key) => qx.read(key),
+    write: (key, value) => qx.write(key, value),
+    remove: (key) => qx.remove(key)
   };
 })();
+
+// CommonJS导出
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { Storage };
+}
