@@ -1,0 +1,20 @@
+{
+  "id": "wohome",
+  "name": "联通智家",
+  "urlPattern": "^https:\\/\\/iotpservice\\.smartont\\.net\\/wohome\\/dispatcher",
+  "mode": "json",
+  "processor": {
+    "processor": "when",
+    "params": {
+      "condition": "includes",
+      "check": "data.posCode",
+      "value": "APP_START_PAGE",
+      "then": {
+        "processor": "deleteFields",
+        "params": {
+          "paths": ["data.configList"]
+        }
+      }
+    }
+  }
+}
