@@ -1,7 +1,3 @@
-// ==========================================
-// 配置加载器 - 远程加载+缓存
-// ==========================================
-
 class SimpleConfigLoader {
   constructor(requestId) {
     this._requestId = requestId;
