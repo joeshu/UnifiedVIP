@@ -1,9 +1,30 @@
+// package.json
 {
   "name": "vip-unlock-configs",
   "version": "22.0.0",
-  "description": "Unified VIP Unlock Manager",
+  "description": "Unified VIP Unlock Manager - QX/Surge/Loon/Stash",
   "scripts": {
     "build": "node scripts/build.js",
-    "add": "node scripts/add-app.js"
+    "add-app": "node scripts/add-app.js",
+    "validate": "node scripts/validate.js",
+    "watch": "nodemon --watch src --exec 'npm run build'",
+    "deploy": "npm run build && git add . && git commit -m 'build: update v22' && git push",
+    "postversion": "npm run build && git push && git push --tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joeshu/vip-unlock-configs.git"
+  },
+  "keywords": [
+    "quantumult-x",
+    "surge",
+    "loon",
+    "stash",
+    "vip-unlock"
+  ],
+  "author": "joeshu",
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^3.0.0"
   }
 }
