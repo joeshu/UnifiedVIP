@@ -1,7 +1,3 @@
-// ==========================================
-// 工具函数集
-// ==========================================
-
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
     try { return JSON.parse(str); } catch (e) { return defaultVal; }
