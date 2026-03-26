@@ -1,3 +1,7 @@
+// ==========================================
+// 平台检测模块 - 支持QX/Surge/Loon/Stash
+// ==========================================
+
 const Platform = {
   isQX: typeof $task !== 'undefined',
   isLoon: typeof $loon !== 'undefined',
@@ -12,3 +16,8 @@ const Platform = {
     return 'Unknown';
   }
 };
+
+// CommonJS导出
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { Platform };
+}
