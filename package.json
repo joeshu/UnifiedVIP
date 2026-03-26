@@ -1,0 +1,9 @@
+{
+  "name": "vip-unlock-configs",
+  "version": "22.0.0",
+  "description": "Unified VIP Unlock Manager",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "add": "node scripts/add-app.js"
+  }
+}
