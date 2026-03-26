@@ -61,7 +61,7 @@ hostname = ${Object.values(manifest.configs).map(c => {
 if (typeof console === 'undefined') globalThis.console = { log: () => {} };
 
 const CONFIG = {
-  REMOTE_BASE: 'https://joeshu.github.io/vip-unlock-configs',
+  REMOTE_BASE: 'https://joeshu.github.io/UnifiedVIP',
   CONFIG_CACHE_TTL: 24 * 60 * 60 * 1000,
   MAX_BODY_SIZE: 5 * 1024 * 1024
 };
