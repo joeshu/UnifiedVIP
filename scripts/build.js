@@ -1,107 +1,57 @@
-#!/usr/bin/env node
+// scripts/build.js
+// 构建脚本 - 所有配置生成到 configs/*.json
 
 const fs = require('fs');
 const path = require('path');
-
-const { generateManifest, generateRemoteConfigs } = require('../src/apps/_index');
+const { 
+  APP_REGISTRY, 
+  getAllConfigs,
+  generateManifest, 
+  generateRewriteComments, 
+  generateHostnames 
+} = require('../src/apps/_index');
+const { generatePrefixIndexCode } = require('../src/apps/_prefix-index');
 
 const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const CONFIGS_DIR = path.join(__dirname, '../configs');
 
-// 确保目录存在
-if (!fs.existsSync(DIST_DIR)) {
-  fs.mkdirSync(DIST_DIR, { recursive: true });
-}
-if (!fs.existsSync(CONFIGS_DIR)) {
-  fs.mkdirSync(CONFIGS_DIR, { recursive: true });
+// 加载核心模块
+function loadModule(filename) {
+  const content = fs.readFileSync(path.join(SRC_DIR, filename), 'utf8');
+  return content.replace(/\/\/ CommonJS导出[\s\S]*$/, '').trim();
 }
 
-// 读取文件
-function readFile(filePath) {
-  const fullPath = path.join(SRC_DIR, filePath);
-  if (!fs.existsSync(fullPath)) {
-    console.error(`❌ 文件不存在: ${fullPath}`);
-    process.exit(1);
-  }
-  return fs.readFileSync(fullPath, 'utf8');
-}
-
-// 主构建函数
-function build() {
-  console.log('🔨 开始构建 UnifiedVIP v22...\n');
-
+// 生成头部注释
+function generateHeader() {
+  const hostnames = generateHostnames();
   const manifest = generateManifest();
-  const remoteConfigs = generateRemoteConfigs();
-
-  // 生成远程配置文件
-  console.log('📝 生成远程配置...');
-  for (const [id, config] of Object.entries(remoteConfigs)) {
-    const filePath = path.join(CONFIGS_DIR, `${id}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
-  }
-  console.log(`   ✅ ${Object.keys(remoteConfigs).length} 个配置`);
-
-  // 生成 rewrite 规则
-  console.log('🔗 生成 rewrite 规则...');
   
-  const hostnameSet = new Set();
-  const rewriteRules = [];
-
-  for (const [id, cfg] of Object.entries(manifest.configs)) {
-    // 提取hostname
-    const matches = cfg.urlPattern.match(/[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/gi);
-    if (matches) {
-      for (const domain of matches) {
-        const parts = domain.toLowerCase().split('.');
-        if (parts.length >= 2) {
-          hostnameSet.add(`*.${parts.slice(-2).join('.')}`);
-        }
-      }
-    }
-
-    // 生成规则
-    const rule = `${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js`;
-    rewriteRules.push(`# ${cfg.name}\n${rule}`);
-  }
-
-  const rewriteContent = `# ==========================================
-# Unified VIP Unlock Manager v22.0.0
-# 生成时间: ${new Date().toLocaleString()}
-# APP数量: ${manifest.total}
-# ==========================================
-
-[rewrite_local]
-${rewriteRules.join('\n\n')}
-
-[mitm]
-hostname = ${Array.from(hostnameSet).join(', ')}
-`;
-
-  fs.writeFileSync(path.join(DIST_DIR, 'rewrite.conf'), rewriteContent);
-
-  // 组装主脚本
-  console.log('📦 组装主脚本...');
-
-  const script = `/*
+  return `/*
  * ==========================================
- * Unified VIP Unlock Manager v22.0.0
+ * Unified VIP Unlock Manager v${manifest.version}-Lazy
  * 构建时间: ${new Date().toISOString()}
  * APP数量: ${manifest.total}
- * 支持模式: json/html/regex/game/hybrid/forward/remote
+ * 配置模式: 全远程（configs/*.json）
+ * 优化: M3存储+S3缓存+P2压缩+三级索引
  * ==========================================
+ * 
+ * [rewrite_local]
+${generateRewriteComments()}
+ * 
+ * [mitm]
+ * hostname = ${hostnames.join(', ')}
  */
 
 'use strict';
 
-// 环境修复
-if (typeof console === 'undefined') {
-  globalThis.console = { log: () => {} };
-}
+// ==========================================
+// 0. 环境修复 & 配置
+// ==========================================
+if (typeof console === 'undefined') { globalThis.console = { log: () => {} }; }
 
-// 配置
 const CONFIG = {
-  REMOTE_BASE: 'https://joeshu.github.io/UnifiedVIP',
+  REMOTE_BASE: 'https://joeshu.github.io/vip-unlock-configs',
   CONFIG_CACHE_TTL: 24 * 60 * 60 * 1000,
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
@@ -110,39 +60,123 @@ const CONFIG = {
   VERBOSE_PATTERN_LOG: false
 };
 
-const META = {
-  name: 'UnifiedVIP',
-  version: '22.0.0'
-};
+const META = { name: 'UnifiedVIP', version: '${manifest.version}-Lazy' };`;
+}
 
-// 内置Manifest
+// 主构建流程
+function build() {
+  console.log('🔨 开始构建 UnifiedVIP v22（全远程模式）\n');
+  
+  // 步骤1：生成所有远程配置文件
+  console.log('📦 步骤1: 生成 configs/*.json...');
+  const allConfigs = getAllConfigs();
+  
+  if (!fs.existsSync(CONFIGS_DIR)) {
+    fs.mkdirSync(CONFIGS_DIR, { recursive: true });
+  }
+  
+  // 清理旧配置（保留备份）
+  const existingFiles = fs.readdirSync(CONFIGS_DIR).filter(f => f.endsWith('.json') && !f.includes('backup'));
+  for (const file of existingFiles) {
+    const oldPath = path.join(CONFIGS_DIR, file);
+    const backupPath = path.join(CONFIGS_DIR, `${file}.backup`);
+    fs.renameSync(oldPath, backupPath);
+  }
+  
+  // 生成新配置
+  for (const [appId, config] of Object.entries(allConfigs)) {
+    const filePath = path.join(CONFIGS_DIR, `${appId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
+  }
+  
+  console.log(`   ✅ 生成 ${Object.keys(allConfigs).length} 个配置文件`);
+  
+  // 步骤2：加载核心模块
+  console.log('📦 步骤2: 加载核心模块...');
+  const platform = loadModule('core/platform.js');
+  const logger = loadModule('core/logger.js');
+  const storage = loadModule('core/storage.js');
+  const http = loadModule('core/http.js');
+  const utils = loadModule('core/utils.js');
+  const regexPool = loadModule('engine/regex-pool.js');
+  const processorFactory = loadModule('engine/processor-factory.js');
+  const compiler = loadModule('engine/compiler.js');
+  const manifestLoader = loadModule('engine/manifest-loader.js');
+  const configLoader = loadModule('engine/config-loader.js');
+  const vipEngine = loadModule('engine/vip-engine.js');
+
+  // 步骤3：组装脚本
+  console.log('📦 步骤3: 组装脚本...');
+  const manifest = generateManifest();
+  const prefixIndexCode = generatePrefixIndexCode();
+  
+  const fullScript = `${generateHeader()}
+
+// ==========================================
+// 1. 内置Manifest（仅元信息，无配置内容）
+// ==========================================
 const BUILTIN_MANIFEST = ${JSON.stringify(manifest, null, 2)};
 
-// 核心模块
-${readFile('core/platform.js')}
+${prefixIndexCode}
 
-${readFile('core/logger.js')}
+// ==========================================
+// 3. 平台检测
+// ==========================================
+${platform}
 
-${readFile('core/storage.js')}
+// ==========================================
+// 4. 日志系统
+// ==========================================
+${logger}
 
-${readFile('core/http.js')}
+// ==========================================
+// 5. M3存储系统
+// ==========================================
+${storage}
 
-${readFile('core/utils.js')}
+// ==========================================
+// 6. HTTP客户端
+// ==========================================
+${http}
 
-// 引擎模块
-${readFile('regex-pool.js')}
+// ==========================================
+// 7. 工具函数
+// ==========================================
+${utils}
 
-${readFile('engine/processor-factory.js')}
+// ==========================================
+// 8. 正则缓存池
+// ==========================================
+${regexPool}
 
-${readFile('engine/compiler.js')}
+// ==========================================
+// 9. 处理器工厂
+// ==========================================
+${processorFactory}
 
-${readFile('engine/manifest-loader.js')}
+// ==========================================
+// 10. 处理器编译器
+// ==========================================
+${compiler}
 
-${readFile('engine/config-loader.js')}
+// ==========================================
+// 11. Manifest加载器
+// ==========================================
+${manifestLoader}
 
-${readFile('engine/vip-engine.js')}
+// ==========================================
+// 12. 配置加载器（全远程模式）
+// ==========================================
+${configLoader}
 
-// 主入口
+// ==========================================
+// 13. VIP引擎
+// ==========================================
+${vipEngine}
+
+// ==========================================
+// 14. 主入口
+// ==========================================
 async function main() {
   const requestId = Math.random().toString(36).substr(2, 6).toUpperCase();
   
@@ -153,24 +187,24 @@ async function main() {
     } else if (typeof $response !== 'undefined' && $response) {
       url = $response.url || '';
     }
-
+    
     if (!url) {
-      Logger.warn('Main', 'No URL detected');
       return $done((typeof $response !== 'undefined' && $response) ? { body: $response.body } : {});
     }
-
-    const displayUrl = url ? url.split('?')[0].substring(0, 60) : 'unknown';
+    
+    const displayUrl = url.split('?')[0].substring(0, 60);
     Logger.info('Main', \`\${requestId} | \${displayUrl}\`);
 
     const mLoader = new SimpleManifestLoader(requestId);
-    const manifest = mLoader.load();
+    const manifest = await mLoader.load();
     const configId = manifest.findMatch(url);
-
+    
     if (!configId) {
       Logger.info('Main', 'No rule matched');
       return $done((typeof $response !== 'undefined' && $response) ? { body: $response.body } : {});
     }
 
+    // 全远程模式：所有配置都通过HTTP加载
     const cLoader = new SimpleConfigLoader(requestId);
     const config = await cLoader.load(configId, manifest.getConfigVersion(configId));
 
@@ -180,8 +214,8 @@ async function main() {
       (typeof $response !== 'undefined' && $response) ? $response.body : '',
       config
     );
-
-    Logger.info('Main', \`\${requestId} completed [\${config.mode || 'default'}]\`);
+    
+    Logger.info('Main', \`\${requestId} completed [\${config.mode}]\`);
     $done(result);
 
   } catch (e) {
@@ -193,29 +227,41 @@ async function main() {
 main();
 `;
 
-  // 写入主脚本
+  // 步骤4：写入构建产物
+  if (!fs.existsSync(DIST_DIR)) {
+    fs.mkdirSync(DIST_DIR, { recursive: true });
+  }
+  
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
-  fs.writeFileSync(outputPath, script);
-
+  fs.writeFileSync(outputPath, fullScript);
+  
   // 统计信息
   const stats = fs.statSync(outputPath);
   const sizeKB = (stats.size / 1024).toFixed(2);
-
-  console.log(`\n✅ 构建成功！`);
-  console.log(`📄 输出文件: ${outputPath}`);
-  console.log(`📦 文件大小: ${sizeKB} KB`);
-  console.log(`📱 APP数量: ${manifest.total}`);
-  console.log(`\n包含APP:`);
   
-  Object.entries(manifest.configs).forEach(([id, cfg], i) => {
-    const mode = remoteConfigs[id]?.mode || 'json';
-    console.log(`   ${i + 1}. ${cfg.name} (${id}) [${mode}]`);
+  console.log(`\n✅ 构建成功: ${outputPath}`);
+  console.log(`📊 脚本大小: ${sizeKB} KB`);
+  console.log(`📱 APP数量: ${manifest.total}`);
+  
+  console.log(`\n📋 配置文件列表（configs/）:`);
+  Object.entries(APP_REGISTRY).forEach(([id, cfg], i) => {
+    const modeIcon = {
+      json: '📦',
+      regex: '🔍',
+      forward: '➡️',
+      remote: '🌐',
+      game: '🎮',
+      hybrid: '🔀',
+      html: '📄'
+    }[cfg.mode] || '⚙️';
+    
+    console.log(`   ${String(i + 1).padStart(2)}. ${modeIcon} ${id.padEnd(12)} ${cfg.name}`);
   });
-
-  console.log(`\n🚀 下一步:`);
-  console.log(`   1. 修改脚本中的"你的用户名"为GitHub用户名`);
-  console.log(`   2. git add . && git commit -m "build: v22" && git push`);
-  console.log(`   3. GitHub Actions自动部署`);
+  
+  console.log(`\n🚀 执行 npm run deploy 发布`);
+  console.log(`   - 脚本 → dist/Unified_VIP_Unlock_Manager_v22.js`);
+  console.log(`   - 配置 → configs/*.json`);
 }
 
+// 运行构建
 build();
