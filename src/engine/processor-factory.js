@@ -1,3 +1,6 @@
+// src/engine/processor-factory.js
+// 处理器工厂 - 创建各类处理器
+
 function createProcessorFactory(requestId) {
   return {
     setFields: (params) => (obj, env) => {
@@ -91,20 +94,78 @@ function createProcessorFactory(requestId) {
       return obj;
     },
 
+    // 修复：正确处理对象和数组类型的 notify
     notify: (params) => (obj, env) => {
       const title = params.title || 'UnifiedVIP';
       let subtitle = params.subtitle || '';
       let message = params.message || '';
 
+      // 从字段读取 subtitle
       if (params.subtitleField) {
-        subtitle = Utils.getPath(obj, params.subtitleField) || subtitle;
+        const fieldData = Utils.getPath(obj, params.subtitleField);
+        if (fieldData !== undefined) {
+          if (typeof fieldData === 'object') {
+            subtitle = JSON.stringify(fieldData);
+          } else {
+            subtitle = String(fieldData);
+          }
+        }
       }
 
+      // 从字段读取 message（支持对象/数组）
       if (params.messageField) {
         const fieldData = Utils.getPath(obj, params.messageField);
-        message = fieldData ? String(fieldData) : message;
+        if (fieldData !== undefined) {
+          if (typeof fieldData === 'object' && fieldData !== null) {
+            // 数组类型
+            if (Array.isArray(fieldData)) {
+              const sep = params.separator || '\n';
+              const prefix = params.prefix || '';
+              const maxLen = params.maxLength || 400;
+              
+              message = fieldData.map(item => {
+                if (typeof item === 'object') {
+                  // 尝试提取常用字段，否则 JSON
+                  return item.text || item.content || item.name || JSON.stringify(item);
+                }
+                return String(item);
+              }).join(sep);
+              
+              // 添加前缀
+              if (prefix) {
+                message = prefix + message;
+              }
+              
+              // 截断超长
+              if (message.length > maxLen) {
+                message = message.substring(0, maxLen) + '...';
+              }
+            } else {
+              // 普通对象，尝试提取常用字段
+              if (fieldData.choices && Array.isArray(fieldData.choices)) {
+                message = fieldData.choices.join('\n');
+              } else if (fieldData.text) {
+                message = String(fieldData.text);
+              } else if (fieldData.content) {
+                message = String(fieldData.content);
+              } else if (fieldData.message) {
+                message = String(fieldData.message);
+              } else {
+                // 使用模板或 JSON
+                if (params.template) {
+                  message = Utils.resolveTemplate(params.template, fieldData);
+                } else {
+                  message = JSON.stringify(fieldData);
+                }
+              }
+            }
+          } else {
+            message = String(fieldData);
+          }
+        }
       }
 
+      // 发送通知
       if (typeof Platform !== 'undefined') {
         if (Platform.isQX && typeof $notify !== 'undefined') {
           $notify(title, subtitle, message, params.options || {});
@@ -113,6 +174,7 @@ function createProcessorFactory(requestId) {
         }
       }
 
+      // 标记字段
       if (params.markField) {
         Utils.setPath(obj, params.markField, true);
       }
@@ -211,7 +273,6 @@ function createProcessorFactory(requestId) {
   };
 }
 
-// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { createProcessorFactory };
 }
