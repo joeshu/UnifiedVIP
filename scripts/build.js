@@ -1,5 +1,5 @@
 // scripts/build.js
-// 构建脚本 - 所有配置生成到 configs/*.json
+// 更新：生成 rewrite.conf 订阅规则文件
 
 const fs = require('fs');
 const path = require('path');
@@ -63,6 +63,31 @@ const CONFIG = {
 const META = { name: 'UnifiedVIP', version: '${manifest.version}-Lazy' };`;
 }
 
+// 生成独立的 rewrite.conf 订阅文件
+function generateRewriteConf() {
+  const hostnames = generateHostnames();
+  
+  let conf = `# Unified VIP Unlock Manager v22
+# 构建时间: ${new Date().toISOString()}
+# APP数量: ${Object.keys(APP_REGISTRY).length}
+# 订阅地址: https://raw.githubusercontent.com/joeshu/vip-unlock-configs/refs/heads/main/dist/rewrite.conf
+
+[rewrite_local]
+
+`;
+  
+  // 生成每条rewrite规则
+  for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
+    conf += `# ${cfg.name}\n`;
+    conf += `${cfg.urlPattern} url script-response-body https://raw.githubusercontent.com/joeshu/vip-unlock-configs/refs/heads/main/dist/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+  }
+  
+  conf += `[mitm]\n`;
+  conf += `hostname = ${hostnames.join(', ')}\n`;
+  
+  return conf;
+}
+
 // 主构建流程
 function build() {
   console.log('🔨 开始构建 UnifiedVIP v22（全远程模式）\n');
@@ -106,7 +131,7 @@ function build() {
   const vipEngine = loadModule('engine/vip-engine.js');
 
   // 步骤3：组装脚本
-  console.log('📦 步骤3: 组装脚本...');
+  console.log('📦 步骤3: 组装主脚本...');
   const manifest = generateManifest();
   const prefixIndexCode = generatePrefixIndexCode();
   
@@ -232,18 +257,24 @@ main();
     fs.mkdirSync(DIST_DIR, { recursive: true });
   }
   
+  // 写入主脚本
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
   fs.writeFileSync(outputPath, fullScript);
+  
+  // 写入订阅规则文件
+  const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
+  fs.writeFileSync(rewritePath, generateRewriteConf());
   
   // 统计信息
   const stats = fs.statSync(outputPath);
   const sizeKB = (stats.size / 1024).toFixed(2);
   
-  console.log(`\n✅ 构建成功: ${outputPath}`);
-  console.log(`📊 脚本大小: ${sizeKB} KB`);
-  console.log(`📱 APP数量: ${manifest.total}`);
+  console.log(`\n✅ 构建成功！`);
+  console.log(`   📄 主脚本: dist/Unified_VIP_Unlock_Manager_v22.js (${sizeKB} KB)`);
+  console.log(`   📋 订阅规则: dist/rewrite.conf`);
+  console.log(`   📦 配置文件: configs/*.json (${Object.keys(allConfigs).length}个)`);
   
-  console.log(`\n📋 配置文件列表（configs/）:`);
+  console.log(`\n📋 APP列表:`);
   Object.entries(APP_REGISTRY).forEach(([id, cfg], i) => {
     const modeIcon = {
       json: '📦',
@@ -258,9 +289,10 @@ main();
     console.log(`   ${String(i + 1).padStart(2)}. ${modeIcon} ${id.padEnd(12)} ${cfg.name}`);
   });
   
-  console.log(`\n🚀 执行 npm run deploy 发布`);
-  console.log(`   - 脚本 → dist/Unified_VIP_Unlock_Manager_v22.js`);
-  console.log(`   - 配置 → configs/*.json`);
+  console.log(`\n🚀 使用方式:`);
+  console.log(`   1. 订阅规则: https://raw.githubusercontent.com/joeshu/vip-unlock-configs/refs/heads/main/dist/rewrite.conf`);
+  console.log(`   2. 或手动添加 [rewrite_local] 和 [mitm] 到QX配置`);
+  console.log(`\n   npm run deploy  # 发布到GitHub Pages`);
 }
 
 // 运行构建
