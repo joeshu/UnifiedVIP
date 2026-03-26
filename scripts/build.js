@@ -1,4 +1,5 @@
 // scripts/build.js
+// 构建脚本 - 生成主脚本、rewrite.conf 和 configs/*.json
 
 const fs = require('fs');
 const path = require('path');
@@ -6,8 +7,7 @@ const {
   APP_REGISTRY, 
   getAllConfigs,
   generateManifest, 
-  generateRewriteComments, 
-  generateHostnames 
+  generateRewriteComments
 } = require('../src/apps/_index');
 const { generatePrefixIndex } = require('../src/apps/_prefix-index');
 
@@ -43,13 +43,6 @@ function generateManifestOneLine() {
 }
 
 // 生成精简头部（无 [rewrite_local] 和 [mitm]）
- //* [rewrite_local]
-//${generateRewriteComments()}
-// * 
- //* [mitm]
- //* hostname = ${hostnames.join(', ')}
- //*/
-
 function generateHeaderMinified() {
   return `/*
  * ==========================================
@@ -87,7 +80,6 @@ function generatePrefixIndexMultiLine() {
   
   const lines = ['const PREFIX_INDEX = {'];
   
-  // exact
   lines.push('  exact: {');
   const exactEntries = Object.entries(index.exact);
   for (let i = 0; i < exactEntries.length; i++) {
@@ -97,7 +89,6 @@ function generatePrefixIndexMultiLine() {
   }
   lines.push('  },');
   
-  // suffix
   lines.push('  suffix: {');
   const suffixEntries = Object.entries(index.suffix);
   for (let i = 0; i < suffixEntries.length; i++) {
@@ -107,7 +98,6 @@ function generatePrefixIndexMultiLine() {
   }
   lines.push('  },');
   
-  // keyword
   if (index.keyword && Object.keys(index.keyword).length > 0) {
     lines.push('  keyword: {');
     const kwEntries = Object.entries(index.keyword);
@@ -130,29 +120,7 @@ function generatePrefixIndexMultiLine() {
 
 // 生成 rewrite.conf（完整的 hostname）
 function generateRewriteConf() {
-  const hostnames = generateFullHostnames();
-  
-  let conf = `# Unified VIP Unlock Manager v22
-# 构建时间: ${new Date().toISOString()}
-# APP数量: ${Object.keys(APP_REGISTRY).length}
-# 订阅地址: https://joeshu.github.io/UnifiedVIP/rewrite.conf
-
-[rewrite_local]
-
-`;
-  
-  for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
-    conf += `# ${cfg.name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
-  }
-  
-  conf += `[mitm]\nhostname = ${hostnames.join(', ')}\n`;
-  
-  return conf;
-}
-
-// 完整的 hostname 列表（对比原脚本）
-function generateFullHostnames() {
-  return [
+  const hostnames = [
     '59.82.99.78',
     '*.ipalfish.com',
     'service.hhdd.com',
@@ -199,6 +167,23 @@ function generateFullHostnames() {
     'star.jvplay.cn',
     'iotpservice.smartont.net'
   ].sort();
+  
+  let conf = `# Unified VIP Unlock Manager v22
+# 构建时间: ${new Date().toISOString()}
+# APP数量: ${Object.keys(APP_REGISTRY).length}
+# 订阅地址: https://joeshu.github.io/UnifiedVIP/rewrite.conf
+
+[rewrite_local]
+
+`;
+  
+  for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
+    conf += `# ${cfg.name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+  }
+  
+  conf += `[mitm]\nhostname = ${hostnames.join(', ')}\n`;
+  
+  return conf;
 }
 
 // 主构建流程
@@ -229,10 +214,14 @@ function build() {
   const http = loadModule('core/http.js');
   const utils = loadModule('core/utils.js');
   const regexPool = loadModule('engine/regex-pool.js');
+  
+  // 注意顺序：processor-factory 依赖 regexPool
   const processorFactory = loadModule('engine/processor-factory.js');
   const compiler = loadModule('engine/compiler.js');
   const manifestLoader = loadModule('engine/manifest-loader.js');
   const configLoader = loadModule('engine/config-loader.js');
+  
+  // 关键：vip-engine 必须在 main 之前，包含 Environment 定义
   const vipEngine = loadModule('engine/vip-engine.js');
 
   // 步骤3：组装主脚本
@@ -303,7 +292,7 @@ ${manifestLoader}
 ${configLoader}
 
 // ==========================================
-// 13. VIP引擎
+// 13. VIP引擎 (包含 Environment 类)
 // ==========================================
 ${vipEngine}
 
@@ -320,7 +309,10 @@ async function main(){
     Logger.info('Main',rid+'|'+u.split('?')[0].substring(0,60));
     const ml=new SimpleManifestLoader(rid),mf=await ml.load(),cid=mf.findMatch(u);
     if(!cid){Logger.info('Main','No match');return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})}
-    const cl=new SimpleConfigLoader(rid),cfg=await cl.load(cid,mf.getConfigVersion(cid)),env=new Environment(META.name),eng=new VipEngine(env,rid),res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
+    const cl=new SimpleConfigLoader(rid),cfg=await cl.load(cid,mf.getConfigVersion(cid));
+    const env=new Environment(META.name);
+    const eng=new VipEngine(env,rid);
+    const res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
     Logger.info('Main',rid+' done ['+cfg.mode+']');
     $done(res)
   }catch(e){
@@ -336,22 +328,39 @@ main();
     fs.mkdirSync(DIST_DIR, { recursive: true });
   }
   
-  const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
-  fs.writeFileSync(outputPath, fullScript);
+  // 写入主脚本
+  fs.writeFileSync(
+    path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js'), 
+    fullScript
+  );
   
-  const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
-  fs.writeFileSync(rewritePath, generateRewriteConf());
+  // 复制 configs 到 dist/configs/
+  const distConfigsDir = path.join(DIST_DIR, 'configs');
+  if (!fs.existsSync(distConfigsDir)) {
+    fs.mkdirSync(distConfigsDir, { recursive: true });
+  }
+  
+  for (const appId of Object.keys(allConfigs)) {
+    fs.copyFileSync(
+      path.join(CONFIGS_DIR, `${appId}.json`),
+      path.join(distConfigsDir, `${appId}.json`)
+    );
+  }
+  
+  // 写入 rewrite.conf
+  fs.writeFileSync(
+    path.join(DIST_DIR, 'rewrite.conf'), 
+    generateRewriteConf()
+  );
   
   // 统计
-  const stats = fs.statSync(outputPath);
-  const rewriteStats = fs.statSync(rewritePath);
+  const stats = fs.statSync(path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js'));
   
   console.log(`\n✅ 构建成功！`);
-  console.log(`   📄 Unified_VIP_Unlock_Manager_v22.js (${(stats.size/1024).toFixed(2)} KB)`);
-  console.log(`   📋 rewrite.conf (${(rewriteStats.size/1024).toFixed(2)} KB)`);
-  console.log(`   📦 configs/*.json (${Object.keys(allConfigs).length}个)`);
-  
-  console.log(`\n🚀 发布: npm run deploy`);
+  console.log(`   📄 dist/Unified_VIP_Unlock_Manager_v22.js (${(stats.size/1024).toFixed(2)} KB)`);
+  console.log(`   📋 dist/rewrite.conf`);
+  console.log(`   📦 dist/configs/*.json (${Object.keys(allConfigs).length}个)`);
+  console.log(`\n🚀 执行: npm run deploy`);
 }
 
 build();
