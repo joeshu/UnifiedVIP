@@ -1,7 +1,3 @@
-// ==========================================
-// HTTP客户端 - 跨平台适配
-// ==========================================
-
 const HTTP = {
   get: (url, timeout = 10000) => new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Timeout')), timeout);
