@@ -11,7 +11,7 @@ class SimpleConfigLoader {
       } catch (e) {}
     }
 
-    const url = `https://joeshu.github.io/vip-unlock-configs/configs/${configId}.json?t=${Date.now()}`;
+    const url = `https://joeshu.github.io/UnifiedVIP/configs/${configId}.json?t=${Date.now()}`;
     
     try {
       const res = await HTTP.get(url);
