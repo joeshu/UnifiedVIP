@@ -523,32 +523,98 @@ function generateManifest() {
 }
 
 /**
- * 生成rewrite注释
+ * 生成rewrite注释（用于主脚本头部）
  */
 function generateRewriteComments() {
   return Object.entries(APP_REGISTRY).map(([id, cfg]) => {
-    return ` * # ${cfg.name}\n * ${cfg.urlPattern} url script-response-body https://raw.githubusercontent.com/joeshu/vip-unlock-configs/refs/heads/main/Unified_VIP_Unlock_Manager_v22.js`;
+    return ` * # ${cfg.name}\n * ${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js`;
   }).join('\n');
 }
 
 /**
- * 生成MITM hostnames
+ * 生成MITM hostname列表（匹配原脚本格式）
  */
 function generateHostnames() {
   const hostnames = new Set();
   
+  // 特殊IP（原脚本中有）
+  hostnames.add('59.82.99.78');
+  
   for (const cfg of Object.values(APP_REGISTRY)) {
     const matches = cfg.urlPattern.match(/[a-z0-9-]+\.[a-z0-9.-]+\.[a-z]{2,}/gi) || [];
+    
     matches.forEach(domain => {
       const cleanDomain = domain.toLowerCase();
-      if (cleanDomain.startsWith('api') || cleanDomain.startsWith('www')) {
-        hostnames.add(`*.${cleanDomain.replace(/^[^.]+\./, '')}`);
-      } else {
-        hostnames.add(cleanDomain);
+      
+      // Keep特殊处理
+      if (cleanDomain.includes('gotokeep')) {
+        hostnames.add('*.gotokeep.*');
+        hostnames.add('api.gotokeep.com');
+        hostnames.add('kit.gotokeep.com');
+        return;
+      }
+      
+      // TopHub多域名家族
+      if (cleanDomain.includes('tophub') || 
+          cleanDomain.includes('tophubdata') ||
+          cleanDomain.includes('idaily') ||
+          cleanDomain.includes('remai') ||
+          cleanDomain.includes('iappdaiy') ||
+          cleanDomain.includes('ipadown')) {
+        hostnames.add('*.tophub.xyz');
+        hostnames.add('*.tophub.today');
+        hostnames.add('*.tophub.app');
+        hostnames.add('*.tophubdata.com');
+        hostnames.add('*.idaily.today');
+        hostnames.add('*.remai.today');
+        hostnames.add('*.iappdaiy.com');
+        hostnames.add('*.ipadown.com');
+        return;
+      }
+      
+      // V2EX
+      if (cleanDomain.includes('v2ex')) {
+        hostnames.add('*.v2ex.com');
+        return;
+      }
+      
+      // 影视动态域名（通配）
+      if (cleanDomain.match(/^(yzy|yz|cfvip)/)) {
+        hostnames.add('*.com');
+        return;
+      }
+      
+      // 通用处理：提取二级域名
+      const parts = cleanDomain.split('.').filter(p => p && !p.match(/^\d+$/));
+      if (parts.length >= 2) {
+        // 去掉www/api等前缀，生成通配符
+        const suffix = parts.slice(-2).join('.');
+        hostnames.add(`*.${suffix}`);
       }
     });
   }
   
+  // 额外添加原脚本中的特殊hostname
+  hostnames.add('*.ipalfish.com');
+  hostnames.add('service.hhdd.com');
+  hostnames.add('apis.lifeweek.com.cn');
+  hostnames.add('fluxapi.vvebo.vip');
+  hostnames.add('res5.haotgame.com');
+  hostnames.add('jsq.mingcalc.cn');
+  hostnames.add('theater-api.sylangyue.xyz');
+  hostnames.add('api.iappdaily.com');
+  hostnames.add('service.gpstool.com');
+  hostnames.add('mapi.kouyuxingqiu.com');
+  hostnames.add('ss.landintheair.com');
+  hostnames.add('apis.folidaymall.com');
+  hostnames.add('gateway-api.yizhilive.com');
+  hostnames.add('javelin.mandrillvr.com');
+  hostnames.add('api.banxueketang.com');
+  hostnames.add('yr-game-api.feigo.fun');
+  hostnames.add('star.jvplay.cn');
+  hostnames.add('iotpservice.smartont.net');
+  
+  // 去重排序
   return Array.from(hostnames).sort();
 }
 
