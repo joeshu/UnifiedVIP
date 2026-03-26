@@ -15,8 +15,10 @@ const APP_REGISTRY = {
         processor: "setFields",
         params: {
           fields: {
-            "data.is_vip": 1,
-            "data.vip_expire_date": 20999999
+        "des": "永久会员",
+        "result.Token": "328971a2f0b318910dbdf45a4442fc56",
+        "result.VipEnd": "2036-03-23",
+        "result.VipEndDes": "永久会员"
           }
         }
       }
