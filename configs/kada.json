@@ -1,5 +1,7 @@
 {
+  "id":"kada"
   "name": "KaDa 阅读 VIP Unlock",
+  "urlPattern":"^https:\//service\\.hhdd\\.com/book2",
   "mode": "json",
   "processor": {
     "processor": "compose",
