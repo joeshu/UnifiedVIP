@@ -1,53 +1,70 @@
 // src/apps/_index.js
-// APP注册表 - 极简版，只保留 urlPattern，其他从 configs/*.json 读取
+// APP注册表 - 自动从 configs/*.json 扫描生成
 
-const APP_REGISTRY = {
-  gps: { urlPattern: "^https:\\/\\/service\\.gpstool\\.com\\/app\\/index\\/getUserInfo" },
-  iappdaily: { urlPattern: "^https:\\/\\/api\\.iappdaily\\.com\\/my\\/balance" },
-  slzd: { urlPattern: "^https:\\/\\/apis\\.lifeweek\\.com\\.cn\\/(?:vip\\/loadMyVipV2|user\\/newindex\\.do|api\\/magazine\\/detail)" },
-  kyxq: { urlPattern: "^https?:\\/\\/mapi\\.kouyuxingqiu\\.com\\/api\\/v2" },
-  foday: { urlPattern: "^https?:\\/\\/apis\\.folidaymall\\.com\\/online\\/capi\\/component\\/getPageComponents" },
-  qiujingapp: { urlPattern: "^https?:\\/\\/gateway-api\\.yizhilive\\.com\\/api\\/(?:v2\\/index\\/carouses\\/(?:3|6|8|11)|v3\\/index\\/all)" },
-  bxkt: { urlPattern: "^https?:\\/\\/api\\.banxueketang\\.com\\/api\\/classpal\\/app\\/v1" },
-  cyljy: { urlPattern: "^https?:\\/\\/yr-game-api\\.feigo\\.fun\\/api\\/user\\/get-game-user-value" },
-  wohome: { urlPattern: "^https:\\/\\/iotpservice\\.smartont\\.net\\/wohome\\/dispatcher" },
-  sylangyue: { urlPattern: "^https?:\\/\\/theater-api\\.sylangyue\\.xyz\\/api\\/user\\/info" },
-  mingcalc: { urlPattern: "^https?:\\/\\/jsq\\.mingcalc\\.cn\\/XMGetMeCount\\.ashx" },
-  kada: { urlPattern: "^https:\\/\\/service\\.hhdd\\.com\\/book2" },
-  ipalfish: { urlPattern: "^https:\\/\\/picturebook\\.ipalfish\\.com\\/pfapi\\/ugc\\/picturebook\\/profile\\/get" },
-  tophub: { urlPattern: "^https?:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync" },
-  keep: { urlPattern: "^https?:\\/\\/(?:api|kit)\\.gotokeep\\.com\\/(?:nuocha|gerudo|athena|nuocha\\/plans|suit\\/v5\\/smart|kprime\\/v4\\/suit\\/sales)\\/" },
-  vvebo: { urlPattern: "^https:\\/\\/fluxapi\\.vvebo\\.vip\\/v1\\/purchase\\/iap\\/subscription" },
-  v2ex: { urlPattern: "^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(?:js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).+$" },
-  xjsm: { urlPattern: "^https?:\\/\\/star\\.jvplay\\.cn\\/v2\\/storage" },
-  mhlz: { urlPattern: "^https?:\\/\\/ss\\.landintheair\\.com\\/storage\\/" },
-  bqwz: { urlPattern: "^https?:\\/\\/javelin\\.mandrillvr\\.com\\/api\\/data\\/get_game_data" },
-  qmjyzc: { urlPattern: "^https?:\\/\\/res5\\.haotgame\\.com\\/cu03\\/static\\/OpenDoors\\/Res\\/data\\/levels\\/\\d+\\.json" },
-  tv: { urlPattern: "^https?:\\/\\/(?:yzy0916|yz1018|yz250907|yz0320|cfvip)\\..+\\.com\\/(?:v2|v1)\\/api\\/(?:basic\\/init|home\\/firstScreen|adInfo\\/getPageAd|home\\/body)" }
-};
+const fs = require('fs');
+const path = require('path');
 
-// ==================== 工具函数 ====================
+const CONFIGS_DIR = path.join(__dirname, '../../configs');
 
-// 从本地 configs/*.json 读取完整配置
+// ==========================================
+// 自动扫描 configs 目录生成注册表
+// ==========================================
+function scanConfigs() {
+  const registry = {};
+  
+  if (!fs.existsSync(CONFIGS_DIR)) {
+    console.warn('⚠️ configs/ 目录不存在');
+    return registry;
+  }
+
+  const files = fs.readdirSync(CONFIGS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .sort();
+
+  for (const file of files) {
+    const id = file.replace('.json', '');
+    const filePath = path.join(CONFIGS_DIR, file);
+    
+    try {
+      const config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      
+      // 必须有 urlPattern 才能注册
+      if (config.urlPattern) {
+        registry[id] = {
+          urlPattern: config.urlPattern
+        };
+      } else {
+        console.warn(`⚠️ ${file} 缺少 urlPattern 字段，跳过注册`);
+      }
+    } catch (e) {
+      console.error(`❌ 读取 ${file} 失败: ${e.message}`);
+    }
+  }
+
+  return registry;
+}
+
+// 动态生成 APP_REGISTRY
+const APP_REGISTRY = scanConfigs();
+
+// ==========================================
+// 获取所有配置（合并 urlPattern + 完整配置）
+// ==========================================
 function getAllConfigs() {
   const configs = {};
-  
+
   for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
     try {
-      // Node.js 环境下读取本地文件
-      const fs = require('fs');
-      const path = require('path');
-      const configPath = path.join(__dirname, '../../configs', `${id}.json`);
-      
+      const configPath = path.join(CONFIGS_DIR, `${id}.json`);
       const fullConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      
-      // 合并：保留 urlPattern，其他从JSON读取
+
+      // 合并：urlPattern 从 registry 获取，其他从 JSON 读取
       configs[id] = {
         urlPattern: baseCfg.urlPattern,
         ...fullConfig
       };
     } catch (e) {
-      console.warn(`Warning: Missing configs/${id}.json, using minimal config`);
+      console.warn(`⚠️ 读取 configs/${id}.json 失败，使用最小配置`);
       configs[id] = {
         urlPattern: baseCfg.urlPattern,
         name: id,
@@ -57,20 +74,23 @@ function getAllConfigs() {
       };
     }
   }
-  
+
   return configs;
 }
 
-// 生成Manifest（脚本内嵌，用于URL匹配）
+// ==========================================
+// 生成 Manifest（用于脚本内嵌）
+// ==========================================
 function generateManifest() {
   const configs = {};
+  
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     configs[id] = {
       urlPattern: cfg.urlPattern,
       configFile: `${id}.json`
     };
   }
-  
+
   return {
     version: "22.0.0",
     updated: new Date().toISOString().split('T')[0],
@@ -79,21 +99,94 @@ function generateManifest() {
   };
 }
 
-// 生成rewrite注释
+// ==========================================
+// 生成 rewrite.conf 注释
+// ==========================================
 function generateRewriteComments() {
   const allConfigs = getAllConfigs();
-  
+
   return Object.entries(APP_REGISTRY).map(([id, cfg]) => {
-    const fullCfg = allConfigs[id];
-    return ` * # ${fullCfg.name || id}\n * ${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js`;
-  }).join('\n');
+    const fullCfg = allConfigs[id] || {};
+    const name = fullCfg.name || id;
+    return ` * # ${name}\\n * ${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js`;
+  }).join('\\n');
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { 
-    APP_REGISTRY,
-    getAllConfigs,
-    generateManifest, 
-    generateRewriteComments
+// ==========================================
+// 生成前缀索引
+// ==========================================
+function generatePrefixIndex() {
+  const index = {
+    exact: {},
+    suffix: {},
+    keyword: {}
   };
+
+  const allConfigs = getAllConfigs();
+
+  for (const [id, cfg] of Object.entries(allConfigs)) {
+    const pattern = cfg.urlPattern;
+    if (!pattern) continue;
+
+    // 提取域名
+    const domainMatches = pattern.match(/[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/gi);
+    if (!domainMatches) continue;
+
+    for (const domain of domainMatches) {
+      const parts = domain.toLowerCase().split('.');
+
+      if (parts.length >= 3) {
+        // 三级域名 → exact
+        if (!index.exact[domain]) {
+          index.exact[domain] = [];
+        }
+        if (!index.exact[domain].includes(id)) {
+          index.exact[domain].push(id);
+        }
+
+        // 二级域名 → suffix
+        const suffix = parts.slice(-2).join('.');
+        if (!index.suffix[suffix]) {
+          index.suffix[suffix] = [];
+        }
+        if (!index.suffix[suffix].includes(id)) {
+          index.suffix[suffix].push(id);
+        }
+      } else {
+        // 二级域名 → suffix
+        if (!index.suffix[domain]) {
+          index.suffix[domain] = [];
+        }
+        if (!index.suffix[domain].includes(id)) {
+          index.suffix[domain].push(id);
+        }
+      }
+
+      // 提取关键字
+      const keywords = parts.filter(p => 
+        p.length >= 4 &&
+        !['api', 'www', 'm', 'mobile', 'app', 'v1', 'v2', 'v3', 'service', 'com', 'cn', 'net', 'org'].includes(p)
+      );
+
+      for (const kw of keywords) {
+        if (!index.keyword[kw] && kw.length >= 4) {
+          index.keyword[kw] = [id];
+        } else if (index.keyword[kw] && !index.keyword[kw].includes(id)) {
+          index.keyword[kw].push(id);
+        }
+      }
+    }
+  }
+
+  return index;
 }
+
+// CommonJS导出
+module.exports = {
+  APP_REGISTRY,
+  getAllConfigs,
+  generateManifest,
+  generateRewriteComments,
+  generatePrefixIndex,
+  scanConfigs  // 导出以便调试
+};
