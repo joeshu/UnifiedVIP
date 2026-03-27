@@ -1,5 +1,5 @@
 {
-  "name": "vip-unlock-configs",
+  "name": "UnifiedVIP",
   "version": "22.0.0",
   "description": "Unified VIP Unlock Manager - QX/Surge/Loon/Stash",
   "scripts": {
@@ -8,38 +8,11 @@
     "validate": "node scripts/validate.js",
     "watch": "nodemon --watch src --exec \"npm run build\"",
     "clean": "rm -rf dist/",
-    "prebuild": "npm run clean",
-    "postbuild": "echo 'Build complete. Run npm run verify to check output.'",
     "verify": "ls -la dist/ && head -c 200 dist/Unified_VIP_Unlock_Manager_v22.js",
     "dev": "npm run build && npm run verify",
     "test": "node scripts/validate.js",
     "deploy:manual": "npm run build && git add . && git commit -m 'build: update v22' && git push",
     "deploy:gh-pages": "npm run build && git checkout gh-pages && cp -r dist/* . && git add . && git commit -m 'deploy: manual update' && git push && git checkout main",
     "release": "npm version patch && git push && git push --tags"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/joeshu/UnifiedVIP.git"
-  },
-  "keywords": [
-    "quantumult-x",
-    "surge",
-    "loon",
-    "stash",
-    "vip-unlock",
-    "qx-script",
-    "surge-module"
-  ],
-  "author": "joeshu",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/joeshu/UnifiedVIP/issues"
-  },
-  "homepage": "https://joeshu.github.io/UnifiedVIP",
-  "devDependencies": {
-    "nodemon": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }
