@@ -42,7 +42,11 @@ const HTTP = (() => {
     }),
 
     post: (options, timeout = 10000) => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Timeout')), timeout);
+      const effectiveTimeout = (options && typeof options.timeout === 'number' && options.timeout > 0)
+        ? options.timeout
+        : timeout;
+
+      const timer = setTimeout(() => reject(new Error('Timeout')), effectiveTimeout);
 
       const callback = (error, response, body) => {
         clearTimeout(timer);
@@ -64,7 +68,7 @@ const HTTP = (() => {
             method: 'POST',
             headers: options.headers || {},
             body: options.body || '',
-            timeout: Math.ceil(timeout / 1000)
+            timeout: Math.ceil(effectiveTimeout / 1000)
           }).then(
             res => callback(null, { statusCode: res.statusCode, headers: res.headers }, res.body),
             err => callback(err, null, null)
@@ -74,7 +78,7 @@ const HTTP = (() => {
             url: options.url,
             headers: options.headers || {},
             body: options.body || '',
-            timeout: timeout / 1000
+            timeout: effectiveTimeout / 1000
           }, callback);
         } else {
           clearTimeout(timer);
