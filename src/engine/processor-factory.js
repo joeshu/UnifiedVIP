@@ -94,7 +94,6 @@ function createProcessorFactory(requestId) {
       return obj;
     },
 
-    // 使用原脚本逻辑的 notify 处理器
     notify: (params) => (obj, env) => {
       const title = params.title || 'UnifiedVIP';
       let subtitle = params.subtitle || '';
@@ -104,17 +103,17 @@ function createProcessorFactory(requestId) {
         subtitle = Utils.getPath(obj, params.subtitleField) || subtitle;
       }
 
-      // template 优先（原脚本逻辑）
+      // template 优先
       if (params.template) {
-        message = params.template.replace(/\\{\\{(\\w+)\\}\\}/g, (match, key) => {
+        message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
           return Utils.getPath(obj, key) || match;
         });
       } else if (params.messageField) {
-        // 使用 formatObject 处理对象（关键修复）
+        // 使用 formatObject 处理对象
         const fieldData = Utils.getPath(obj, params.messageField);
         if (fieldData) {
           if (typeof fieldData === 'object') {
-            message = Utils.formatObject(fieldData, params.separator || '\\n');
+            message = Utils.formatObject(fieldData, params.separator || '\n');
           } else {
             message = String(fieldData);
           }
@@ -244,6 +243,7 @@ function createProcessorFactory(requestId) {
   };
 }
 
+// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { createProcessorFactory };
 }
