@@ -7,8 +7,19 @@ const fs = require('fs');
 const path = require('path');
 
 // ==========================================
-// 目录配置
+// 构建配置开关
 // ==========================================
+const BUILD_CONFIG = {
+  // 是否启用诊断功能（生产环境设为 false，调试设为 true）
+  ENABLE_DIAGNOSE: true,
+  
+  // 是否开启 DEBUG 模式（生产环境设为 false）
+  DEBUG_MODE: true,
+  
+  // 版本号
+  VERSION: '22.0.0-Lazy'
+};
+
 const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const CONFIGS_DIR = path.join(__dirname, '../configs');
@@ -36,7 +47,7 @@ if (!fs.existsSync(CONFIGS_DIR)) {
 // ==========================================
 // 加载 APP 注册表和前缀索引生成器
 // ==========================================
-const { APP_REGISTRY, getAllConfigs, generateRewriteComments } = require('../src/apps/_index');
+const { APP_REGISTRY, getAllConfigs } = require('../src/apps/_index');
 const { generatePrefixIndex } = require('../src/apps/_prefix-index');
 
 // ==========================================
@@ -51,16 +62,20 @@ function loadModule(filename) {
 // 生成器函数
 // ==========================================
 
-// 生成头部
+// 生成头部（根据开关设置 DEBUG）
 function generateHeaderMinified() {
+  const debugFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
+  const verboseFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
+  
   return `/*
  * ==========================================
- * Unified VIP Unlock Manager v22.0.0-Lazy
+ * Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}
  * 构建时间: ${new Date().toISOString()}
  * APP数量: ${Object.keys(APP_REGISTRY).length}
  * ==========================================
  *
  * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
+${BUILD_CONFIG.ENABLE_DIAGNOSE ? ' * 诊断功能: 在 QX 控制台运行 diagnose() 查看详细匹配信息' : ''}
  */
 
 'use strict';
@@ -76,11 +91,11 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: true,
-  VERBOSE_PATTERN_LOG: false
+  DEBUG: ${debugFlag},
+  VERBOSE_PATTERN_LOG: ${verboseFlag}
 };
 
-const META = { name: 'UnifiedVIP', version: '22.0.0-Lazy' };`;
+const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
 }
 
 // ==========================================
@@ -176,6 +191,149 @@ function generatePrefixIndexCode() {
 }
 
 // ==========================================
+// 生成诊断函数代码（根据开关决定是否包含）
+// ==========================================
+function generateDiagnoseFunction() {
+  if (!BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    return ''; // 如果不启用诊断，返回空字符串
+  }
+  
+  return `
+// ==========================================
+// 诊断函数 - 在 QX 控制台运行 diagnose() 查看详细匹配信息
+// ==========================================
+function diagnose(urlToTest) {
+  console.log("\\n========================================");
+  console.log("UnifiedVIP 诊断工具 v${BUILD_CONFIG.VERSION}");
+  console.log("========================================\\n");
+  
+  const testUrls = urlToTest ? [urlToTest] : [
+    "https://yz1018.6vh3qyu9x.com/v2/api/basic/init",
+    "https://www.v2ex.com/t/1201518",
+    "https://api.gotokeep.com/nuocha/plans"
+  ];
+  
+  // 1. 检查全局变量
+  console.log("1. 全局变量检查:");
+  console.log("   BUILTIN_MANIFEST 存在:", typeof BUILTIN_MANIFEST !== 'undefined');
+  console.log("   PREFIX_INDEX 存在:", typeof PREFIX_INDEX !== 'undefined');
+  console.log("   findByPrefix 存在:", typeof findByPrefix === 'function');
+  
+  if (typeof BUILTIN_MANIFEST !== 'undefined') {
+    console.log("   APP总数:", BUILTIN_MANIFEST.total);
+    if (BUILTIN_MANIFEST.configs.tv) {
+      console.log("   ✅ tv 配置存在");
+    } else {
+      console.log("   ❌ tv 配置不存在");
+    }
+  }
+  
+  // 2. 测试每个 URL
+  console.log("\\n2. URL 匹配测试:");
+  for (const url of testUrls) {
+    console.log("\\n   ----------------------------------------");
+    console.log("   测试 URL:", url);
+    
+    try {
+      const hostname = new URL(url).hostname;
+      console.log("   提取域名:", hostname);
+      
+      // 测试 findByPrefix
+      if (typeof findByPrefix === 'function') {
+        const prefixResult = findByPrefix(hostname);
+        if (prefixResult) {
+          console.log("   ✅ findByPrefix 成功:", prefixResult.method, "->", JSON.stringify(prefixResult.ids));
+          
+          // 测试每个候选 APP
+          let matched = false;
+          for (const id of prefixResult.ids) {
+            const cfg = BUILTIN_MANIFEST.configs[id];
+            if (!cfg || !cfg.urlPattern) {
+              console.log("      " + id + ": ❌ 无 urlPattern");
+              continue;
+            }
+            
+            try {
+              const regex = new RegExp(cfg.urlPattern);
+              const isMatch = regex.test(url);
+              console.log("      " + id + ":", isMatch ? "✅ 匹配" : "❌ 不匹配");
+              if (isMatch) {
+                matched = true;
+                console.log("      -> 最终匹配:", id);
+                break;
+              }
+            } catch (e) {
+              console.log("      " + id + ": ❌ 正则错误 -", e.message);
+            }
+          }
+          
+          if (!matched) {
+            console.log("   ⚠️  警告: 前缀匹配成功但无 APP 正则匹配");
+          }
+        } else {
+          console.log("   ❌ findByPrefix 返回 null");
+          console.log("   🔍 尝试全量扫描...");
+          
+          // 全量扫描
+          for (const [id, cfg] of Object.entries(BUILTIN_MANIFEST.configs)) {
+            if (!cfg.urlPattern) continue;
+            try {
+              const regex = new RegExp(cfg.urlPattern);
+              if (regex.test(url)) {
+                console.log("      ✅", id, "匹配成功 (但未通过前缀索引)");
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+      } else {
+        console.log("   ❌ findByPrefix 函数不存在");
+      }
+    } catch (e) {
+      console.log("   ❌ 错误:", e.message);
+    }
+  }
+  
+  // 3. 显示 PREFIX_INDEX 统计
+  console.log("\\n3. PREFIX_INDEX 统计:");
+  if (typeof PREFIX_INDEX !== 'undefined') {
+    console.log("   exact:", Object.keys(PREFIX_INDEX.exact).length);
+    console.log("   suffix:", Object.keys(PREFIX_INDEX.suffix).length);
+    console.log("   keyword:", Object.keys(PREFIX_INDEX.keyword || {}).length);
+    
+    if (PREFIX_INDEX.keyword && PREFIX_INDEX.keyword.yz) {
+      console.log("   ✅ keyword['yz']:", JSON.stringify(PREFIX_INDEX.keyword.yz));
+    } else {
+      console.log("   ❌ keyword['yz'] 不存在");
+    }
+    
+    if (PREFIX_INDEX.keyword && PREFIX_INDEX.keyword.v2ex) {
+      console.log("   ✅ keyword['v2ex']:", JSON.stringify(PREFIX_INDEX.keyword.v2ex));
+    } else {
+      console.log("   ❌ keyword['v2ex'] 不存在");
+    }
+  }
+  
+  console.log("\\n========================================");
+  console.log("诊断结束");
+  console.log("========================================\\n");
+  
+  return { success: true };
+}
+
+// 如果 URL 包含 diagnose=1 参数，自动运行诊断
+if (typeof $request !== 'undefined') {
+  const url = typeof $request === 'string' ? $request : ($request.url || '');
+  if (url.includes('diagnose=1')) {
+    diagnose();
+    // 诊断后不执行主逻辑，直接返回
+    $done({});
+  }
+}
+`;
+}
+
+// ==========================================
 // 生成 rewrite.conf
 // ==========================================
 function generateRewriteConf() {
@@ -227,10 +385,11 @@ function generateRewriteConf() {
     'iotpservice.smartont.net'
   ].sort();
 
-  let conf = `# Unified VIP Unlock Manager v22.0.0-Lazy
+  let conf = `# Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}
 # 构建时间: ${new Date().toISOString()}
 # APP数量: ${Object.keys(APP_REGISTRY).length}
 # 订阅地址: https://joeshu.github.io/UnifiedVIP/rewrite.conf
+${BUILD_CONFIG.ENABLE_DIAGNOSE ? '# 诊断功能: 在 QX 控制台运行 diagnose() 查看详细匹配信息' : ''}
 
 [rewrite_local]
 
@@ -259,7 +418,9 @@ function generateRewriteConf() {
 // 主构建流程
 // ==========================================
 function build() {
-  console.log('\n🔨 构建 UnifiedVIP v22.0.0-Lazy\n');
+  console.log(`\n🔨 构建 UnifiedVIP v${BUILD_CONFIG.VERSION}`);
+  console.log(`   诊断功能: ${BUILD_CONFIG.ENABLE_DIAGNOSE ? '✅ 启用' : '❌ 禁用'}`);
+  console.log(`   DEBUG模式: ${BUILD_CONFIG.DEBUG_MODE ? '✅ 启用' : '❌ 禁用'}\n`);
 
   // 步骤 1: 读取配置
   console.log('📦 步骤 1: 读取配置...');
@@ -302,9 +463,13 @@ function build() {
 
   // 步骤 4: 组装主脚本
   console.log('📦 步骤 4: 组装主脚本...');
+  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    console.log('  ℹ️  诊断函数已启用');
+  }
   
   const manifestStr = generateManifestOneLine();
   const prefixCode = generatePrefixIndexCode();
+  const diagnoseCode = generateDiagnoseFunction();
 
   const fullScript = `${generateHeaderMinified()}
 
@@ -372,9 +537,10 @@ ${modules.configLoader}
 // 13. VIP引擎 (包含 Environment 类)
 // ==========================================
 ${modules.vipEngine}
+${diagnoseCode ? '\n// ==========================================\n// 14. 诊断函数\n// ==========================================\n' + diagnoseCode : ''}
 
 // ==========================================
-// 14. 主入口
+// ${diagnoseCode ? '15' : '14'}. 主入口
 // ==========================================
 async function main(){
  const rid=Math.random().toString(36).substr(2,6).toUpperCase();
@@ -408,12 +574,23 @@ main();
   const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
   console.log(`  ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
   
-  // 验证 tv pattern
+  // 验证
   const scriptContent = fs.readFileSync(outputPath, 'utf8');
+  
+  // 验证 tv pattern
   const tvMatch = scriptContent.match(/"tv":\{"name":"([^"]*)","urlPattern":"([^"]+)"/);
   if (tvMatch) {
     console.log(`  🔍 tv: ${tvMatch[1]}`);
     console.log(`  🔍 pattern: ${tvMatch[2].substring(0, 60)}...`);
+  }
+  
+  // 验证诊断函数
+  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    if (scriptContent.includes('function diagnose(')) {
+      console.log(`  ✅ 诊断函数已添加`);
+    } else {
+      console.log(`  ❌ 诊断函数缺失`);
+    }
   }
   
   const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
@@ -431,6 +608,14 @@ main();
   
   const configCount = fs.readdirSync(path.join(DIST_DIR, 'configs')).filter(f => f.endsWith('.json')).length;
   console.log(`  📦 configs/*.json (${configCount} 个)`);
+
+  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    console.log('\n📋 诊断功能说明:');
+    console.log('  1. 在 Quantumult X 中运行脚本');
+    console.log('  2. 打开控制台(设置 → 日志)');
+    console.log('  3. 输入: diagnose()');
+    console.log('  4. 查看详细的匹配过程');
+  }
 
   console.log('\n🚀 发布:');
   console.log('  git add . && git commit -m "build: update v22" && git push');
