@@ -114,42 +114,16 @@ function generateManifestOneLine() {
     };
   }
 
-  const manifest = {
-    version: "22.0.0",
-    updated: new Date().toISOString().split('T')[0],
-    total: Object.keys(configs).length,
-    configs: configs
-  };
-
-  // 关键修复: 先 stringify，然后修复双重转义问题
-  let jsonStr = JSON.stringify(manifest);
+  // 关键修复: 手动构建 JSON 字符串，完全控制转义
+  // 对每个 urlPattern 单独使用 JSON.stringify，然后拼接
+  const entries = [];
+  for (const [id, cfg] of Object.entries(configs)) {
+    // JSON.stringify 会自动正确转义，不会累积
+    const patternStr = JSON.stringify(cfg.urlPattern);
+    entries.push(`"${id}":{"urlPattern":${patternStr},"configFile":"${cfg.configFile}"}`);
+  }
   
-  // 修复双重转义: 将 \\\\ 替换为 \\ (将 JSON 的 \\" 还原为 \")
-  // 注意: 在 JSON 字符串中，\\ 表示一个字面意义上的反斜杠
-  // 但在 JavaScript 字符串字面量中，我们需要正确处理
-  
-  // 步骤 1: 临时标记特殊的转义序列
-  jsonStr = jsonStr
-    .replace(/\\\\\\\\/g, '{{ESC}}')     // 保存真正的 \\
-    .replace(/\\\\\\./g, '{{DOT}}')       // 保存 \\.
-    .replace(/\\\\\\//g, '{{SLASH}}')    // 保存 \\/
-    .replace(/\\\\\\|/g, '{{PIPE}}')     // 保存 \\|
-    .replace(/\\\\\\(/g, '{{LPAREN}}')    // 保存 \\(
-    .replace(/\\\\\\)/g, '{{RPAREN}}');   // 保存 \\)
-  
-  // 步骤 2: 将剩余的 \\\\ 替换为 \\ (这些是双重转义)
-  jsonStr = jsonStr.replace(/\\\\/g, '\\');
-  
-  // 步骤 3: 还原特殊的转义序列
-  jsonStr = jsonStr
-    .replace(/{{ESC}}/g, '\\\\')
-    .replace(/{{DOT}}/g, '\\.')
-    .replace(/{{SLASH}}/g, '\\/')
-    .replace(/{{PIPE}}/g, '\\|')
-    .replace(/{{LPAREN}}/g, '\\(')
-    .replace(/{{RPAREN}}/g, '\\)');
-  
-  return jsonStr;
+  return `{"version":"22.0.0","updated":"${new Date().toISOString().split('T')[0]}","total":${entries.length},"configs":{${entries.join(',')}}}`;
 }
 
 // ==========================================
@@ -446,12 +420,12 @@ main();
   const scriptContent = fs.readFileSync(outputPath, 'utf8');
   const tvMatch = scriptContent.match(/"tv":\{"urlPattern":"([^"]+)"/);
   if (tvMatch) {
-    console.log(`  🔍 tv pattern: ${tvMatch[1].substring(0, 80)}...`);
+    console.log(`  🔍 tv pattern 预览: ${tvMatch[1].substring(0, 60)}...`);
     // 检查是否有双重转义
     if (tvMatch[1].includes('\\\\.')) {
-      console.log(`  ⚠️  警告: tv pattern 可能存在双重转义!`);
+      console.log(`  ⚠️  警告: tv pattern 可能存在双重转义 (\\\\.)`);
     } else if (tvMatch[1].includes('\\.')) {
-      console.log(`  ✅ tv pattern 转义正确`);
+      console.log(`  ✅ tv pattern 转义正确 (\\.)`);
     }
   }
   
