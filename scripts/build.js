@@ -76,7 +76,7 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: false,
+  DEBUG: true,
   VERBOSE_PATTERN_LOG: false
 };
 
@@ -84,30 +84,26 @@ const META = { name: 'UnifiedVIP', version: '22.0.0-Lazy' };`;
 }
 
 // ==========================================
-// 生成单行压缩 Manifest (修复版)
+// 生成单行压缩 Manifest
 // ==========================================
 function generateManifestOneLine() {
   const configs = {};
   
-  // 直接从 configs/*.json 读取，保持原始转义不变
+  // 直接从 configs/*.json 读取
   for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
     const configPath = path.join(CONFIGS_DIR, `${id}.json`);
     
     if (fs.existsSync(configPath)) {
       try {
-        // 读取原始文件内容，不要通过 require 避免二次处理
         const rawContent = fs.readFileSync(configPath, 'utf8');
         const config = JSON.parse(rawContent);
         
-        // 只提取 name 和 urlPattern，保持 urlPattern 原样不变
-        // JSON.parse 会将文件中的 "\\/" 转换为 "\/" (JavaScript 字符串)
-        // 后续的 JSON.stringify 会将其转回 "\\/" (JSON 格式)
         configs[id] = {
           name: config.name || id,
           urlPattern: config.urlPattern
         };
       } catch (e) {
-        console.warn(`  ⚠️  读取 ${id}.json 失败: ${e.message}`);
+        console.warn(`  ⚠️  读取 ${id}.json 失败`);
         configs[id] = {
           name: id,
           urlPattern: baseCfg.urlPattern
@@ -121,16 +117,15 @@ function generateManifestOneLine() {
     }
   }
 
-  // 关键：使用 JSON.stringify 生成正确的 JSON 字符串
-  // 这会正确处理转义：JavaScript 字符串中的 "\/" 会变成 JSON 中的 "\\/"
   const manifest = {
+ {
     version: "22.0.0",
     updated: new Date().toISOString().split('T')[0],
     total: Object.keys(configs).length,
     configs: configs
   };
 
-  // 直接 stringify，这是最可靠的方式，不进行任何手动替换
+  // 使用 JSON.stringify，这会正确处理所有转义
   return JSON.stringify(manifest);
 }
 
@@ -177,7 +172,7 @@ function generatePrefixIndexCode() {
   
   lines.push('};');
   
-  // 添加 findByPrefix 函数（单行压缩）
+  // 添加 findByPrefix 函数
   lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
   
   return lines.join('\n');
@@ -187,7 +182,6 @@ function generatePrefixIndexCode() {
 // 生成 rewrite.conf
 // ==========================================
 function generateRewriteConf() {
-  // 完整的 hostname 列表
   const hostnames = [
     '59.82.99.78',
     '*.ipalfish.com',
@@ -245,7 +239,6 @@ function generateRewriteConf() {
 
 `;
 
-  // 获取完整配置以读取 name
   let allConfigs = {};
   try {
     allConfigs = getAllConfigs();
@@ -271,7 +264,7 @@ function generateRewriteConf() {
 function build() {
   console.log('\n🔨 构建 UnifiedVIP v22.0.0-Lazy\n');
 
-  // 步骤 1: 读取并合并配置
+  // 步骤 1: 读取配置
   console.log('📦 步骤 1: 读取配置...');
   let allConfigs;
   try {
@@ -287,11 +280,7 @@ function build() {
   let count = 0;
   for (const [appId, config] of Object.entries(allConfigs)) {
     const jsonContent = JSON.stringify(config, null, 2);
-    
-    // 写入源目录（保留备份）
     fs.writeFileSync(path.join(CONFIGS_DIR, `${appId}.json`), jsonContent);
-    
-    // 写入 dist 目录（用于部署）
     fs.writeFileSync(path.join(DIST_DIR, 'configs', `${appId}.json`), jsonContent);
     count++;
   }
@@ -417,7 +406,6 @@ main();
   // 步骤 5: 写入构建产物
   console.log('📦 步骤 5: 写入构建产物...');
   
-  // 写入主脚本
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
   fs.writeFileSync(outputPath, fullScript);
   const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
@@ -425,31 +413,17 @@ main();
   
   // 验证 tv pattern
   const scriptContent = fs.readFileSync(outputPath, 'utf8');
-  const tvMatch = scriptContent.match(/"tv":\{"name":"[^"]*","urlPattern":"([^"]+)"/);
+  const tvMatch = scriptContent.match(/"tv":\{"name":"([^"]*)","urlPattern":"([^"]+)"/);
   if (tvMatch) {
-    const pattern = tvMatch[1];
-    console.log(`  🔍 tv pattern 预览: ${pattern.substring(0, 80)}...`);
-    
-    // 验证格式
-    if (pattern.includes('\\\\/')) {
-      console.log(`  ⚠️  警告: pattern 包含 \\\\\\/ (过度转义)`);
-    } else if (pattern.includes('\\/')) {
-      console.log(`  ✅ tv pattern 转义正确 (\\/)`);
-    }
-    
-    // 检查是否有 (?: 非捕获组
-    if (pattern.includes('(?:yzy0916')) {
-      console.log(`  ✅ 包含非捕获组 (?:)`);
-    }
+    console.log(`  🔍 tv: ${tvMatch[1]}`);
+    console.log(`  🔍 pattern: ${tvMatch[2].substring(0, 60)}...`);
   }
   
-  // 写入 rewrite.conf
   const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
   fs.writeFileSync(rewritePath, generateRewriteConf());
   const rewriteSize = (fs.statSync(rewritePath).size / 1024).toFixed(2);
   console.log(`  ✅ rewrite.conf (${rewriteSize} KB)`);
 
-  // 验证输出
   console.log('\n📋 构建完成：');
   const distFiles = fs.readdirSync(DIST_DIR);
   distFiles.forEach(file => {
@@ -461,11 +435,9 @@ main();
   const configCount = fs.readdirSync(path.join(DIST_DIR, 'configs')).filter(f => f.endsWith('.json')).length;
   console.log(`  📦 configs/*.json (${configCount} 个)`);
 
-  console.log('\n🚀 发布命令:');
-  console.log('  npm run deploy:manual    # 手动推送到 main');
-  console.log('  git push                 # 触发 GitHub Actions 自动部署');
-  console.log('\n📎 订阅地址:');
-  console.log('  https://joeshu.github.io/UnifiedVIP/rewrite.conf');
+  console.log('\n🚀 发布:');
+  console.log('  git add . && git commit -m "build: update v22" && git push');
+  console.log('\n📎 订阅: https://joeshu.github.io/UnifiedVIP/rewrite.conf');
 }
 
 // 运行构建
