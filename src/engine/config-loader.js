@@ -1,5 +1,5 @@
 // src/engine/config-loader.js
-// 配置加载器 - 支持远程加载和缓存
+// 配置加载器 - 修复版 (与 vip-unlock-configs 兼容)
 
 class SimpleConfigLoader {
   constructor(requestId) {
@@ -9,53 +9,56 @@ class SimpleConfigLoader {
   async load(configId, remoteVersion) {
     // 检查缓存
     const cached = Storage.readConfig(configId);
+
     if (cached) {
-      Logger.info('ConfigLoader', `${configId} cache hit`);
-      return this._prepareConfig(cached);
+      try {
+        // 解析缓存的 JSON 字符串
+        const { v, t, d } = JSON.parse(cached);
+        if (v === remoteVersion && (Date.now() - t) < CONFIG.CONFIG_CACHE_TTL) {
+          Logger.info('ConfigLoader', `${configId} cache hit`);
+          return this._prepareConfig(d);
+        }
+      } catch (e) {}
     }
 
     // 远程加载
-    const remoteBase = typeof CONFIG !== 'undefined' ? CONFIG.REMOTE_BASE : 'https://joeshu.github.io/UnifiedVIP';
-    const url = `${remoteBase}/configs/${configId}.json?t=${Date.now()}`;
-    
+    const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json?t=${Date.now()}`;
+
     Logger.info('ConfigLoader', `${configId} fetching...`);
 
     try {
-      const res = await HTTP.get(url, typeof CONFIG !== 'undefined' ? CONFIG.TIMEOUT * 1000 : 10000);
-      
+      const res = await HTTP.get(url);
       if (res.statusCode !== 200 || !res.body) {
         throw new Error(`HTTP ${res.statusCode}`);
       }
 
-      const config = Utils.safeJsonParse(res.body);
-      if (!config) {
-        throw new Error('Invalid JSON');
-      }
+      const fresh = Utils.safeJsonParse(res.body);
 
-      // 写入缓存
-      Storage.writeConfig(configId, config);
-      
-      // 返回预处理后的配置
-      return this._prepareConfig(config);
+      // 写入缓存 - 使用兼容格式
+      Storage.writeConfig(configId, {
+        v: remoteVersion,
+        t: Date.now(),
+        d: fresh
+      });
+
+      return this._prepareConfig(fresh);
 
     } catch (e) {
       Logger.error('ConfigLoader', `${configId} failed: ${e.message}`);
-      
+
       // 降级使用缓存（即使过期）
       if (cached) {
         Logger.warn('ConfigLoader', `${configId} using stale cache`);
-        return this._prepareConfig(cached);
+        const { d } = JSON.parse(cached);
+        return this._prepareConfig(d);
       }
-      
       throw e;
     }
   }
 
-  // 预处理配置（关键修复：预编译正则规则）
   _prepareConfig(raw) {
     const config = Object.assign({}, raw);
 
-    // forward/remote 模式不需要预处理
     if (config.mode === 'forward' || config.mode === 'remote') {
       return config;
     }
@@ -89,6 +92,7 @@ class SimpleConfigLoader {
   }
 }
 
+// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { SimpleConfigLoader };
 }
