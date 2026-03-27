@@ -76,7 +76,7 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: true,
+  DEBUG: false,
   VERBOSE_PATTERN_LOG: false
 };
 
@@ -89,7 +89,6 @@ const META = { name: 'UnifiedVIP', version: '22.0.0-Lazy' };`;
 function generateManifestOneLine() {
   const configs = {};
   
-  // 直接从 configs/*.json 读取
   for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
     const configPath = path.join(CONFIGS_DIR, `${id}.json`);
     
@@ -118,14 +117,12 @@ function generateManifestOneLine() {
   }
 
   const manifest = {
- {
     version: "22.0.0",
     updated: new Date().toISOString().split('T')[0],
     total: Object.keys(configs).length,
     configs: configs
   };
 
-  // 使用 JSON.stringify，这会正确处理所有转义
   return JSON.stringify(manifest);
 }
 
@@ -172,7 +169,7 @@ function generatePrefixIndexCode() {
   
   lines.push('};');
   
-  // 添加 findByPrefix 函数
+  // 添加 findByPrefix 函数（单行压缩）
   lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
   
   return lines.join('\n');
