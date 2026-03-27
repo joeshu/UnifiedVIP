@@ -59,32 +59,39 @@ class VipEngine {
   }
 
   async process(body, config) {
-    if (!body) return { body: '{}' };
+    if (!config || !config.mode) {
+      return { body: typeof body === 'string' ? body : Utils.safeJsonStringify(body || {}) };
+    }
 
-    const bodySize = typeof body === 'string' ? body.length : Utils.safeJsonStringify(body).length;
+    // forward/remote 模式不依赖响应 body，必须优先分流，避免空 body 被提前短路
+    if (config.mode === 'forward') {
+      return await this._processForward(config);
+    }
+    if (config.mode === 'remote') {
+      return await this._processRemote(config);
+    }
+
+    const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
+    if (!normalizedBody) return { body: '{}' };
+
     const maxSize = typeof CONFIG !== 'undefined' ? CONFIG.MAX_BODY_SIZE : 5 * 1024 * 1024;
-
-    if (bodySize > maxSize) {
-      return { body: typeof body === 'string' ? body : Utils.safeJsonStringify(body) };
+    if (normalizedBody.length > maxSize) {
+      return { body: normalizedBody };
     }
 
     switch (config.mode) {
-      case 'forward':
-        return await this._processForward(config);
-      case 'remote':
-        return await this._processRemote(config);
       case 'json':
-        return this._processJson(body, config);
+        return this._processJson(normalizedBody, config);
       case 'regex':
-        return this._processRegex(body, config);
+        return this._processRegex(normalizedBody, config);
       case 'game':
-        return this._processGame(body, config);
+        return this._processGame(normalizedBody, config);
       case 'hybrid':
-        return this._processHybrid(body, config);
+        return this._processHybrid(normalizedBody, config);
       case 'html':
-        return this._processHtml(body, config);
+        return this._processHtml(normalizedBody, config);
       default:
-        return { body };
+        return { body: normalizedBody };
     }
   }
 
