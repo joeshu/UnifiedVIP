@@ -2,6 +2,7 @@
   "name": "真题伴侣",
   "description": "真题伴侣 VIP 解锁 - 替换用户数据为 VIP 密文",
   "version": "3.5.9",
+  "urlPattern": "^https?://newtest\\.zoooy111\\.com/mobilev4\\.php/User/index",
   "mode": "json",
   "priority": 10,
   "processor": "setFields",
