@@ -1,9 +1,9 @@
 // src/core/storage.js
-// M3单键存储系统 - 修复返回格式
+// M3单键存储系统 - 与 vip-unlock-configs 兼容版本
 
 const Storage = (() => {
   const KEY = 'vip_v22_data';
-  
+
   const qx = {
     read: (k) => $prefs.valueForKey(k),
     write: (k, v) => $prefs.setValueForKey(v, k),
@@ -17,27 +17,35 @@ const Storage = (() => {
       try {
         const all = JSON.parse(raw);
         const item = all[configId];
-        const ttl = typeof CONFIG !== 'undefined' ? CONFIG.CONFIG_CACHE_TTL : 86400000;
+        const ttl = typeof CONFIG !== 'undefined' ? CONFIG.CONFIG_CACHE_TTL : 24 * 60 * 60 * 1000;
         if (item && (Date.now() - item.t) < ttl) {
-          // 修复：返回 item.d（配置数据），不是整个 item
-          return item.d;
+          // 修复：返回 JSON 字符串，与 vip-unlock-configs 兼容
+          return JSON.stringify(item);
         }
       } catch (e) {}
       return null;
     },
 
-    writeConfig: (configId, data) => {
+    writeConfig: (configId, value) => {
       let all = {};
       const raw = qx.read(KEY);
       if (raw) {
         try { all = JSON.parse(raw); } catch (e) {}
       }
 
-      // 存储结构：{v:版本, t:时间戳, d:数据}
-      all[configId] = { 
-        v: '1.0',
-        t: Date.now(), 
-        d: data 
+      // 兼容处理：value 可能是对象或 JSON 字符串
+      let parsed;
+      try {
+        parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      } catch (e) {
+        parsed = value;
+      }
+
+      // 确保存储结构包含 v, t, d
+      all[configId] = {
+        v: parsed.v || '1.0',
+        t: Date.now(),
+        d: parsed.d || parsed
       };
 
       let str = JSON.stringify(all);
@@ -50,7 +58,7 @@ const Storage = (() => {
           .slice(0, 3);
         all = Object.fromEntries(sorted);
         str = JSON.stringify(all);
-        Logger.info('Storage', 'Storage limit exceeded, kept recent 3 configs');
+        Logger.info('Storage', 'QX存储超限，保留最近3个配置');
       }
 
       qx.write(KEY, str);
@@ -62,6 +70,7 @@ const Storage = (() => {
   };
 })();
 
+// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { Storage };
 }
