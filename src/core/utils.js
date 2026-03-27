@@ -1,5 +1,5 @@
 // src/core/utils.js
-// 工具函数集
+// 工具函数集 - 完整版
 
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
@@ -16,7 +16,7 @@ const Utils = {
     let current = obj;
     for (const part of parts) {
       if (current == null) return undefined;
-      const match = part.match(/^([^\\[\\]]+)\\[(\\d+)\\]$/);
+      const match = part.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
       if (match) {
         current = current[match[1]] && current[match[1]][parseInt(match[2])];
       } else {
@@ -33,7 +33,7 @@ const Utils = {
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
       const next = parts[i + 1];
-      const match = part.match(/^([^\\[\\]]+)\\[(\\d+)\\]$/);
+      const match = part.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
       const isNextArray = /^\\[.*\\]$/.test(next);
 
       if (match) {
@@ -45,7 +45,7 @@ const Utils = {
     }
 
     const last = parts[parts.length - 1];
-    const lastMatch = last.match(/^([^\\[\\]]+)\\[(\\d+)\\]$/);
+    const lastMatch = last.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
     if (lastMatch) {
       const arr = current[lastMatch[1]] || (current[lastMatch[1]] = []);
       arr[parseInt(lastMatch[2])] = value;
@@ -67,14 +67,13 @@ const Utils = {
   resolveTemplate: (str, obj) => {
     if (typeof str !== 'string') return str;
     if (!str.includes('{{')) return str;
-    return str.replace(/\\{\\{([^}]+)\\}\\}/g, (match, path) => {
+    return str.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
       const value = Utils.getPath(obj, path.trim());
       return value !== undefined ? value : match;
     });
   },
 
-  // 新增：格式化对象为字符串（用于 notify）
-  formatObject: (obj, separator = '\\n') => {
+  formatObject: (obj, separator = '\n') => {
     if (typeof obj !== 'object' || obj === null) return String(obj);
     if (Array.isArray(obj)) {
       return obj.map(item => Utils.formatObject(item, separator)).join(separator);
@@ -90,6 +89,7 @@ const Utils = {
   }
 };
 
+// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { Utils };
 }
