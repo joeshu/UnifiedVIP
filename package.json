@@ -6,9 +6,16 @@
     "build": "node scripts/build.js",
     "add-app": "node scripts/add-app.js",
     "validate": "node scripts/validate.js",
-    "watch": "nodemon --watch src --exec 'npm run build'",
-    "deploy": "npm run build && git add . && git commit -m 'build: update v22' && git push",
-    "postversion": "npm run build && git push && git push --tags"
+    "watch": "nodemon --watch src --exec \"npm run build\"",
+    "clean": "rm -rf dist/",
+    "prebuild": "npm run clean",
+    "postbuild": "echo 'Build complete. Run npm run verify to check output.'",
+    "verify": "ls -la dist/ && head -c 200 dist/Unified_VIP_Unlock_Manager_v22.js",
+    "dev": "npm run build && npm run verify",
+    "test": "node scripts/validate.js",
+    "deploy:manual": "npm run build && git add . && git commit -m 'build: update v22' && git push",
+    "deploy:gh-pages": "npm run build && git checkout gh-pages && cp -r dist/* . && git add . && git commit -m 'deploy: manual update' && git push && git checkout main",
+    "release": "npm version patch && git push && git push --tags"
   },
   "repository": {
     "type": "git",
@@ -19,11 +26,20 @@
     "surge",
     "loon",
     "stash",
-    "vip-unlock"
+    "vip-unlock",
+    "qx-script",
+    "surge-module"
   ],
   "author": "joeshu",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/joeshu/UnifiedVIP/issues"
+  },
+  "homepage": "https://joeshu.github.io/UnifiedVIP",
   "devDependencies": {
     "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
