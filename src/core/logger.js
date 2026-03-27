@@ -1,13 +1,13 @@
+// src/core/logger.js
+// 日志系统 - Proxy 代理模式 (与 vip-unlock-configs 一致)
+
 const Logger = (() => {
   const isDebug = typeof CONFIG !== 'undefined' ? CONFIG.DEBUG === true : false;
-  
+
   if (!isDebug) {
-    return {
-      info: () => {},
-      error: () => {},
-      debug: () => {},
-      warn: () => {}
-    };
+    return new Proxy({}, {
+      get: () => () => {}
+    });
   }
 
   const now = () => {
