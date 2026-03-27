@@ -11,7 +11,7 @@ const path = require('path');
 // ==========================================
 const BUILD_CONFIG = {
   // 是否启用诊断功能（生产环境设为 false，调试设为 true）
-  ENABLE_DIAGNOSE: true,
+  ENABLE_DIAGNOSE: false,
   
   // 是否开启 DEBUG 模式（生产环境设为 false）
   DEBUG_MODE: true,
