@@ -2,7 +2,6 @@
 
 // scripts/build.js
 // 构建脚本 - 生成 Unified_VIP_Unlock_Manager_v22.js 和 rewrite.conf
-// 修复: 正确处理 JSON 中的正则转义，避免双重转义问题
 
 const fs = require('fs');
 const path = require('path');
@@ -77,7 +76,7 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: true,
+  DEBUG: false,
   VERBOSE_PATTERN_LOG: false
 };
 
@@ -85,45 +84,54 @@ const META = { name: 'UnifiedVIP', version: '22.0.0-Lazy' };`;
 }
 
 // ==========================================
-// 生成单行压缩 Manifest (修复双重转义问题)
+// 生成单行压缩 Manifest (修复版)
 // ==========================================
 function generateManifestOneLine() {
   const configs = {};
   
-  // 直接从 configs/*.json 读取原始 urlPattern，避免转义累积
-  for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
+  // 直接从 configs/*.json 读取，保持原始转义不变
+  for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
     const configPath = path.join(CONFIGS_DIR, `${id}.json`);
-    let urlPattern = cfg.urlPattern;
     
-    // 优先从原始 JSON 文件读取，确保获取正确的未转义值
     if (fs.existsSync(configPath)) {
       try {
+        // 读取原始文件内容，不要通过 require 避免二次处理
         const rawContent = fs.readFileSync(configPath, 'utf8');
-        const rawConfig = JSON.parse(rawContent);
-        if (rawConfig.urlPattern) {
-          urlPattern = rawConfig.urlPattern;
-        }
+        const config = JSON.parse(rawContent);
+        
+        // 只提取 name 和 urlPattern，保持 urlPattern 原样不变
+        // JSON.parse 会将文件中的 "\\/" 转换为 "\/" (JavaScript 字符串)
+        // 后续的 JSON.stringify 会将其转回 "\\/" (JSON 格式)
+        configs[id] = {
+          name: config.name || id,
+          urlPattern: config.urlPattern
+        };
       } catch (e) {
-        console.warn(`  ⚠️  读取 ${id}.json 失败，使用 registry 中的 pattern`);
+        console.warn(`  ⚠️  读取 ${id}.json 失败: ${e.message}`);
+        configs[id] = {
+          name: id,
+          urlPattern: baseCfg.urlPattern
+        };
       }
+    } else {
+      configs[id] = {
+        name: id,
+        urlPattern: baseCfg.urlPattern
+      };
     }
-    
-    configs[id] = {
-      urlPattern: urlPattern,
-      configFile: `${id}.json`
-    };
   }
 
-  // 关键修复: 手动构建 JSON 字符串，完全控制转义
-  // 对每个 urlPattern 单独使用 JSON.stringify，然后拼接
-  const entries = [];
-  for (const [id, cfg] of Object.entries(configs)) {
-    // JSON.stringify 会自动正确转义，不会累积
-    const patternStr = JSON.stringify(cfg.urlPattern);
-    entries.push(`"${id}":{"urlPattern":${patternStr},"configFile":"${cfg.configFile}"}`);
-  }
-  
-  return `{"version":"22.0.0","updated":"${new Date().toISOString().split('T')[0]}","total":${entries.length},"configs":{${entries.join(',')}}}`;
+  // 关键：使用 JSON.stringify 生成正确的 JSON 字符串
+  // 这会正确处理转义：JavaScript 字符串中的 "\/" 会变成 JSON 中的 "\\/"
+  const manifest = {
+    version: "22.0.0",
+    updated: new Date().toISOString().split('T')[0],
+    total: Object.keys(configs).length,
+    configs: configs
+  };
+
+  // 直接 stringify，这是最可靠的方式，不进行任何手动替换
+  return JSON.stringify(manifest);
 }
 
 // ==========================================
@@ -156,7 +164,7 @@ function generatePrefixIndexCode() {
   
   // keyword (如果有)
   if (index.keyword && Object.keys(index.keyword).length > 0) {
-    lines[lines.length - 1] = ' },'; // 修改 suffix 结尾
+    lines[lines.length - 1] = ' },';
     lines.push(' keyword: {');
     const kwEntries = Object.entries(index.keyword);
     for (let i = 0; i < kwEntries.length; i++) {
@@ -242,7 +250,6 @@ function generateRewriteConf() {
   try {
     allConfigs = getAllConfigs();
   } catch (e) {
-    // 如果读取失败，使用基础配置
     for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
       allConfigs[id] = { name: id, ...cfg };
     }
@@ -418,14 +425,21 @@ main();
   
   // 验证 tv pattern
   const scriptContent = fs.readFileSync(outputPath, 'utf8');
-  const tvMatch = scriptContent.match(/"tv":\{"urlPattern":"([^"]+)"/);
+  const tvMatch = scriptContent.match(/"tv":\{"name":"[^"]*","urlPattern":"([^"]+)"/);
   if (tvMatch) {
-    console.log(`  🔍 tv pattern 预览: ${tvMatch[1].substring(0, 60)}...`);
-    // 检查是否有双重转义
-    if (tvMatch[1].includes('\\\\.')) {
-      console.log(`  ⚠️  警告: tv pattern 可能存在双重转义 (\\\\.)`);
-    } else if (tvMatch[1].includes('\\.')) {
-      console.log(`  ✅ tv pattern 转义正确 (\\.)`);
+    const pattern = tvMatch[1];
+    console.log(`  🔍 tv pattern 预览: ${pattern.substring(0, 80)}...`);
+    
+    // 验证格式
+    if (pattern.includes('\\\\/')) {
+      console.log(`  ⚠️  警告: pattern 包含 \\\\\\/ (过度转义)`);
+    } else if (pattern.includes('\\/')) {
+      console.log(`  ✅ tv pattern 转义正确 (\\/)`);
+    }
+    
+    // 检查是否有 (?: 非捕获组
+    if (pattern.includes('(?:yzy0916')) {
+      console.log(`  ✅ 包含非捕获组 (?:)`);
     }
   }
   
