@@ -44,7 +44,7 @@ jobs:
         with:
           name: dist-files
           path: dist/
-          retention-days: 1
+          retention-days: 7
 
   deploy-pages:
     needs: build
