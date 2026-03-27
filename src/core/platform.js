@@ -1,3 +1,6 @@
+// src/core/platform.js
+// 平台检测
+
 const Platform = {
   isQX: typeof $task !== 'undefined',
   isLoon: typeof $loon !== 'undefined',
