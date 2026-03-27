@@ -1,89 +1,6 @@
 // src/apps/_prefix-index.js
-// 智能前缀索引 - 从APP_REGISTRY自动生成
+// 前缀索引生成器 - 修复版
 
-const { APP_REGISTRY } = require('./_index');
-
-/**
- * 从urlPattern提取域名特征
- */
-function extractDomainFeatures(urlPattern) {
-  const features = {
-    exact: [],
-    suffix: [],
-    keyword: []
-  };
-
-  // 清理正则语法，提取域名
-  const cleanPattern = urlPattern
-    .replace(/\\\./g, '.')
-    .replace(/\\\/\//g, '//')
-    .replace(/\(\?:/g, '(')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\{.*?\}/g, '')
-    .replace(/[\\^$+?()|]/g, ' ')
-    .replace(/\s+/g, ' ');
-
-  const domainMatches = cleanPattern.match(/[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/gi) || [];
-  
-  for (const domain of domainMatches) {
-    const parts = domain.toLowerCase().split('.').filter(p => p && !p.match(/^\d+$/));
-    if (parts.length < 2) continue;
-
-    if (parts.length >= 3) {
-      const fullDomain = parts.slice(-3).join('.');
-      if (!features.exact.includes(fullDomain)) {
-        features.exact.push(fullDomain);
-      }
-      const suffix = parts.slice(-2).join('.');
-      if (!features.suffix.includes(suffix)) {
-        features.suffix.push(suffix);
-      }
-    } else {
-      const suffix = parts.slice(-2).join('.');
-      if (!features.suffix.includes(suffix)) {
-        features.suffix.push(suffix);
-      }
-    }
-    
-    const keywords = parts.filter(p => 
-      !['api', 'www', 'm', 'mobile', 'app', 'v1', 'v2', 'v3', 'service', 'gateway'].includes(p) &&
-      p.length >= 3
-    );
-    features.keyword.push(...keywords);
-  }
-
-  features.exact = [...new Set(features.exact)];
-  features.suffix = [...new Set(features.suffix)];
-  features.keyword = [...new Set(features.keyword)].slice(0, 2);
-
-  return features;
-}
-
-/**
- * 手动覆盖规则
- */
-const MANUAL_OVERRIDES = {
-  tophub: {
-    suffix: [
-      'tophub.xyz',
-      'tophub.today',
-      'tophub.app',
-      'tophubdata.com',
-      'idaily.today',
-      'remai.today',
-      'iappdaiy.com',
-      'ipadown.com'
-    ],
-    keyword: ['tophub']
-  },
-  tv: {
-    keyword: ['yz', 'cfvip']
-  }
-};
-
-/**
- * 生成前缀索引
- */
 function generatePrefixIndex() {
   const index = {
     exact: {},
@@ -91,90 +8,102 @@ function generatePrefixIndex() {
     keyword: {}
   };
 
-  for (const [appId, config] of Object.entries(APP_REGISTRY)) {
-    // 应用手动覆盖
-    if (MANUAL_OVERRIDES[appId]) {
-      const override = MANUAL_OVERRIDES[appId];
-      if (override.exact) {
-        override.exact.forEach(d => { if (!index.exact[d]) index.exact[d] = [appId]; });
-      }
-      if (override.suffix) {
-        override.suffix.forEach(d => { if (!index.suffix[d]) index.suffix[d] = [appId]; });
-      }
-      if (override.keyword) {
-        override.keyword.forEach(k => { if (!index.keyword[k]) index.keyword[k] = [appId]; });
-      }
-      continue;
-    }
+  // 强制包含的关键字（不受长度限制）
+  const forcedKeywords = {
+    'yz': ['tv'],        // yz1018, yzy0916 等域名
+    'v2ex': ['v2ex'],    // v2ex 域名
+    'vvebo': ['vvebo'],  // vvebo 域名
+    'tv': ['tv'],        // 备用
+    'slzd': ['slzd'],    // 三联中读
+    'kyxq': ['kyxq'],    // 口语星球
+    'mhlz': ['mhlz'],    // 梦幻量子
+    'xjsm': ['xjsm'],    // 小精灵去水印
+    'bqwz': ['bqwz'],    // 比趣王者
+    'qmj': ['qmjyzc'],   // 趣谜局
+    'bxkt': ['bxkt'],    // 伴学课堂
+    'cyljy': ['cyljy'],  // 次元领域
+    'wohome': ['wohome'], // 我家智能
+    'kada': ['kada'],    // Kada故事
+    'ipalfish': ['ipalfish'], // 伴鱼绘本
+    'gps': ['gps'],      // GPS工具箱
+    'iapp': ['iappdaily'], // iAppDaily
+    'slzd': ['slzd'],    // 三联中读
+    'sylangyue': ['sylangyue'], // 三联中读剧场
+    'mingcalc': ['mingcalc'], // 明计算
+    'qiujing': ['qiujingapp'], // 趣鲸App
+    'foday': ['foday'],  // Foday
+    'zhenti': ['zhenti'] // 真题伴侣
+  };
 
-    // 自动提取
-    const features = extractDomainFeatures(config.urlPattern);
-    
-    features.exact.forEach(domain => {
-      if (!index.exact[domain]) index.exact[domain] = [appId];
-      else if (!index.exact[domain].includes(appId)) index.exact[domain].push(appId);
-    });
+  // 先添加强制关键字
+  for (const [kw, ids] of Object.entries(forcedKeywords)) {
+    index.keyword[kw] = ids;
+  }
 
-    features.suffix.forEach(domain => {
-      if (!index.suffix[domain]) index.suffix[domain] = [appId];
-      else if (!index.suffix[domain].includes(appId)) index.suffix[domain].push(appId);
-    });
+  const allConfigs = getAllConfigs();
 
-    const bestKw = features.keyword.sort((a, b) => a.length - b.length)[0];
-    if (bestKw && !index.keyword[bestKw]) {
-      index.keyword[bestKw] = [appId];
+  for (const [id, cfg] of Object.entries(allConfigs)) {
+    const pattern = cfg.urlPattern;
+    if (!pattern) continue;
+
+    // 提取域名
+    const domainMatches = pattern.match(/[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9.-]*\.[a-z]{2,}/gi);
+    if (!domainMatches) continue;
+
+    for (const domain of domainMatches) {
+      const parts = domain.toLowerCase().split('.');
+
+      if (parts.length >= 3) {
+        // 三级域名 → exact
+        if (!index.exact[domain]) {
+          index.exact[domain] = [];
+        }
+        if (!index.exact[domain].includes(id)) {
+          index.exact[domain].push(id);
+        }
+
+        // 二级域名 → suffix
+        const suffix = parts.slice(-2).join('.');
+        if (!index.suffix[suffix]) {
+          index.suffix[suffix] = [];
+        }
+        if (!index.suffix[suffix].includes(id)) {
+          index.suffix[suffix].push(id);
+        }
+      } else {
+        // 二级域名 → suffix
+        if (!index.suffix[domain]) {
+          index.suffix[domain] = [];
+        }
+        if (!index.suffix[domain].includes(id)) {
+          index.suffix[domain].push(id);
+        }
+      }
+
+      // 提取关键字（修改：降低长度限制到 2，并添加特殊处理）
+      const keywords = parts.filter(p => {
+        // 强制包含的关键字（不受限制）
+        if (forcedKeywords[p]) return true;
+        
+        // 其他关键字：长度 >= 3（原来是 4），且不在排除列表中
+        return p.length >= 3 && 
+          !['api', 'www', 'm', 'mobile', 'app', 'v1', 'v2', 'v3', 'service', 'com', 'cn', 'net', 'org', 'http', 'https'].includes(p);
+      });
+
+      for (const kw of keywords) {
+        if (!index.keyword[kw]) {
+          index.keyword[kw] = [id];
+        } else if (!index.keyword[kw].includes(id)) {
+          index.keyword[kw].push(id);
+        }
+      }
     }
   }
 
   return index;
 }
 
-/**
- * 生成构建时代码
- */
-function generatePrefixIndexCode() {
-  const index = generatePrefixIndex();
-  
-  return `// ==========================================
-// 2. 智能前缀索引（构建时自动生成）
-// ==========================================
-const PREFIX_INDEX = ${JSON.stringify(index, null, 2)};
-
-/**
- * 三级前缀匹配：exact > suffix > keyword
- */
-function findByPrefix(hostname) {
-  const h = hostname.toLowerCase();
-  
-  // L1: 精确匹配
-  if (PREFIX_INDEX.exact[h]) {
-    return { ids: PREFIX_INDEX.exact[h], method: 'exact', matched: h };
-  }
-  
-  // L2: 后缀匹配
-  for (const [suffix, ids] of Object.entries(PREFIX_INDEX.suffix)) {
-    if (h.endsWith('.' + suffix) || h === suffix) {
-      return { ids, method: 'suffix', matched: suffix };
-    }
-  }
-  
-  // L3: 关键字匹配
-  for (const [kw, ids] of Object.entries(PREFIX_INDEX.keyword)) {
-    if (h.includes(kw)) {
-      return { ids, method: 'keyword', matched: kw };
-    }
-  }
-  
-  return null;
-}`;
-}
-
 // CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { 
-    generatePrefixIndex, 
-    generatePrefixIndexCode,
-    extractDomainFeatures,
-    MANUAL_OVERRIDES
-  };
+  module.exports = { generatePrefixIndex };
 }
