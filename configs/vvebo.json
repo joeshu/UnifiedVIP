@@ -1,6 +1,6 @@
 {
   "name": "Vvebo Subscription Forward",
-   "id":"vvebo"
+   "id":"vvebo",
   "urlPattern":"^https:\\/\\/fluxapi\\.vvebo\\.vip\\/v1\\/purchase\\/iap\\/subscription",
    "mode": "forward",
   "forwardUrl": "https://mock.forward1.workers.dev/forward/v1/purchase/iap/subscription",
