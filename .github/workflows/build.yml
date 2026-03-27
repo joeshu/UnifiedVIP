@@ -1,91 +1,33 @@
-# .github/workflows/build.yml
-name: Build and Deploy
+// scripts/build.js
+// 关键修改：生产环境 DEBUG 设为 false
 
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
+function generateHeaderMinified() {
+  return `/*
+ * ==========================================
+ * Unified VIP Unlock Manager v22.0.0-Lazy
+ * 构建时间: ${new Date().toISOString()}
+ * APP数量: ${Object.keys(APP_REGISTRY).length}
+ * ==========================================
+ *
+ * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
+ */
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
+'use strict';
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+// ==========================================
+// 0. 环境修复 & 配置
+// ==========================================
+if (typeof console === 'undefined') { globalThis.console = { log: () => {} }; }
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+const CONFIG = {
+  REMOTE_BASE: 'https://joeshu.github.io/UnifiedVIP',
+  CONFIG_CACHE_TTL: 24 * 60 * 60 * 1000,
+  MAX_BODY_SIZE: 5 * 1024 * 1024,
+  MAX_PROCESSORS_PER_REQUEST: 30,
+  TIMEOUT: 10,
+  DEBUG: false,  // 生产环境关闭调试
+  VERBOSE_PATTERN_LOG: false
+};
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build
-        run: npm run build
-
-      - name: Copy configs to dist
-        run: |
-          mkdir -p dist/configs
-          cp configs/*.json dist/configs/
-          ls -la dist/
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-files
-          path: dist/
-          retention-days: 1
-
-  deploy-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-files
-          path: ./dist
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  deploy-gh-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-files
-          path: ./dist
-
-      - name: Deploy to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: gh-pages
-          force_orphan: true
-          commit_message: "deploy: update from main ${{ github.sha }}"
+const META = { name: 'UnifiedVIP', version: '22.0.0-Lazy' };`;
+}
