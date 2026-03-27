@@ -2,6 +2,7 @@
 
 // scripts/build.js
 // 构建脚本 - 生成 Unified_VIP_Unlock_Manager_v22.js 和 rewrite.conf
+// 修复: 正确处理 JSON 中的正则转义，避免双重转义问题
 
 const fs = require('fs');
 const path = require('path');
@@ -36,7 +37,7 @@ if (!fs.existsSync(CONFIGS_DIR)) {
 // ==========================================
 // 加载 APP 注册表和前缀索引生成器
 // ==========================================
-const { APP_REGISTRY, getAllConfigs, generateManifest, generateRewriteComments } = require('../src/apps/_index');
+const { APP_REGISTRY, getAllConfigs, generateRewriteComments } = require('../src/apps/_index');
 const { generatePrefixIndex } = require('../src/apps/_prefix-index');
 
 // ==========================================
@@ -76,19 +77,39 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: true,
+  DEBUG: false,
   VERBOSE_PATTERN_LOG: false
 };
 
 const META = { name: 'UnifiedVIP', version: '22.0.0-Lazy' };`;
 }
 
-// 生成单行压缩 Manifest
+// ==========================================
+// 生成单行压缩 Manifest (修复双重转义问题)
+// ==========================================
 function generateManifestOneLine() {
   const configs = {};
+  
+  // 直接从 configs/*.json 读取原始 urlPattern，避免转义累积
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
+    const configPath = path.join(CONFIGS_DIR, `${id}.json`);
+    let urlPattern = cfg.urlPattern;
+    
+    // 优先从原始 JSON 文件读取，确保获取正确的未转义值
+    if (fs.existsSync(configPath)) {
+      try {
+        const rawContent = fs.readFileSync(configPath, 'utf8');
+        const rawConfig = JSON.parse(rawContent);
+        if (rawConfig.urlPattern) {
+          urlPattern = rawConfig.urlPattern;
+        }
+      } catch (e) {
+        console.warn(`  ⚠️  读取 ${id}.json 失败，使用 registry 中的 pattern`);
+      }
+    }
+    
     configs[id] = {
-      urlPattern: cfg.urlPattern,
+      urlPattern: urlPattern,
       configFile: `${id}.json`
     };
   }
@@ -96,14 +117,44 @@ function generateManifestOneLine() {
   const manifest = {
     version: "22.0.0",
     updated: new Date().toISOString().split('T')[0],
-    total: Object.keys(APP_REGISTRY).length,
+    total: Object.keys(configs).length,
     configs: configs
   };
 
-  return JSON.stringify(manifest);
+  // 关键修复: 先 stringify，然后修复双重转义问题
+  let jsonStr = JSON.stringify(manifest);
+  
+  // 修复双重转义: 将 \\\\ 替换为 \\ (将 JSON 的 \\" 还原为 \")
+  // 注意: 在 JSON 字符串中，\\ 表示一个字面意义上的反斜杠
+  // 但在 JavaScript 字符串字面量中，我们需要正确处理
+  
+  // 步骤 1: 临时标记特殊的转义序列
+  jsonStr = jsonStr
+    .replace(/\\\\\\\\/g, '{{ESC}}')     // 保存真正的 \\
+    .replace(/\\\\\\./g, '{{DOT}}')       // 保存 \\.
+    .replace(/\\\\\\//g, '{{SLASH}}')    // 保存 \\/
+    .replace(/\\\\\\|/g, '{{PIPE}}')     // 保存 \\|
+    .replace(/\\\\\\(/g, '{{LPAREN}}')    // 保存 \\(
+    .replace(/\\\\\\)/g, '{{RPAREN}}');   // 保存 \\)
+  
+  // 步骤 2: 将剩余的 \\\\ 替换为 \\ (这些是双重转义)
+  jsonStr = jsonStr.replace(/\\\\/g, '\\');
+  
+  // 步骤 3: 还原特殊的转义序列
+  jsonStr = jsonStr
+    .replace(/{{ESC}}/g, '\\\\')
+    .replace(/{{DOT}}/g, '\\.')
+    .replace(/{{SLASH}}/g, '\\/')
+    .replace(/{{PIPE}}/g, '\\|')
+    .replace(/{{LPAREN}}/g, '\\(')
+    .replace(/{{RPAREN}}/g, '\\)');
+  
+  return jsonStr;
 }
 
-// 生成 PREFIX_INDEX
+// ==========================================
+// 生成 PREFIX_INDEX 代码
+// ==========================================
 function generatePrefixIndexCode() {
   const index = generatePrefixIndex();
   
@@ -144,13 +195,15 @@ function generatePrefixIndexCode() {
   
   lines.push('};');
   
-  // 添加 findByPrefix 函数
+  // 添加 findByPrefix 函数（单行压缩）
   lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
   
   return lines.join('\n');
 }
 
+// ==========================================
 // 生成 rewrite.conf
+// ==========================================
 function generateRewriteConf() {
   // 完整的 hostname 列表
   const hostnames = [
@@ -283,17 +336,20 @@ function build() {
   // 步骤 4: 组装主脚本
   console.log('📦 步骤 4: 组装主脚本...');
   
+  const manifestStr = generateManifestOneLine();
+  const prefixCode = generatePrefixIndexCode();
+
   const fullScript = `${generateHeaderMinified()}
 
 // ==========================================
 // 1. 内置Manifest (P2压缩)
 // ==========================================
-const BUILTIN_MANIFEST = ${generateManifestOneLine()};
+const BUILTIN_MANIFEST = ${manifestStr};
 
 // ==========================================
 // 2. 前缀索引 (构建时生成)
 // ==========================================
-${generatePrefixIndexCode()}
+${prefixCode}
 
 // ==========================================
 // 3. 平台检测
@@ -385,6 +441,19 @@ main();
   fs.writeFileSync(outputPath, fullScript);
   const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
   console.log(`  ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
+  
+  // 验证 tv pattern
+  const scriptContent = fs.readFileSync(outputPath, 'utf8');
+  const tvMatch = scriptContent.match(/"tv":\{"urlPattern":"([^"]+)"/);
+  if (tvMatch) {
+    console.log(`  🔍 tv pattern: ${tvMatch[1].substring(0, 80)}...`);
+    // 检查是否有双重转义
+    if (tvMatch[1].includes('\\\\.')) {
+      console.log(`  ⚠️  警告: tv pattern 可能存在双重转义!`);
+    } else if (tvMatch[1].includes('\\.')) {
+      console.log(`  ✅ tv pattern 转义正确`);
+    }
+  }
   
   // 写入 rewrite.conf
   const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
