@@ -12,10 +12,10 @@ const path = require('path');
 const BUILD_CONFIG = {
   // 是否启用诊断功能（生产环境设为 false，调试设为 true）
   ENABLE_DIAGNOSE: false,
-  
+
   // 是否开启 DEBUG 模式（生产环境设为 false）
   DEBUG_MODE: true,
-  
+
   // 版本号
   VERSION: '22.0.0-Lazy'
 };
@@ -23,6 +23,7 @@ const BUILD_CONFIG = {
 const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const CONFIGS_DIR = path.join(__dirname, '../configs');
+const RULES_DIR = path.join(__dirname, '../rules');
 
 // ==========================================
 // 步骤 0: 清理并创建目录
@@ -31,17 +32,18 @@ console.log('📂 步骤 0: 准备目录...');
 
 if (fs.existsSync(DIST_DIR)) {
   fs.rmSync(DIST_DIR, { recursive: true, force: true });
-  console.log('  🗑️  清理旧 dist/ 目录');
+  console.log('  🗑️ 清理旧 dist/ 目录');
 }
 
 fs.mkdirSync(DIST_DIR, { recursive: true });
 fs.mkdirSync(path.join(DIST_DIR, 'configs'), { recursive: true });
+fs.mkdirSync(CONFIGS_DIR, { recursive: true });
 console.log('  ✅ 创建 dist/ 和 dist/configs/');
 
-// 确保 configs/ 源目录存在
-if (!fs.existsSync(CONFIGS_DIR)) {
-  fs.mkdirSync(CONFIGS_DIR, { recursive: true });
-  console.log('  ⚠️  创建 configs/ 源目录');
+// 确保 rules/ 目录存在（用于自定义 reject 规则）
+if (!fs.existsSync(RULES_DIR)) {
+  fs.mkdirSync(RULES_DIR, { recursive: true });
+  console.log('  ⚠️ 创建 rules/ 目录（可放置 custom-reject.txt）');
 }
 
 // ==========================================
@@ -66,7 +68,7 @@ function loadModule(filename) {
 function generateHeaderMinified() {
   const debugFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
   const verboseFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
-  
+
   return `/*
  * ==========================================
  * Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}
@@ -103,21 +105,21 @@ const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
 // ==========================================
 function generateManifestOneLine() {
   const configs = {};
-  
+
   for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
     const configPath = path.join(CONFIGS_DIR, `${id}.json`);
-    
+
     if (fs.existsSync(configPath)) {
       try {
         const rawContent = fs.readFileSync(configPath, 'utf8');
         const config = JSON.parse(rawContent);
-        
+
         configs[id] = {
           name: config.name || id,
           urlPattern: config.urlPattern
         };
       } catch (e) {
-        console.warn(`  ⚠️  读取 ${id}.json 失败`);
+        console.warn(`  ⚠️ 读取 ${id}.json 失败`);
         configs[id] = {
           name: id,
           urlPattern: baseCfg.urlPattern
@@ -146,9 +148,9 @@ function generateManifestOneLine() {
 // ==========================================
 function generatePrefixIndexCode() {
   const index = generatePrefixIndex();
-  
+
   const lines = ['const PREFIX_INDEX = {'];
-  
+
   // exact
   lines.push(' exact: {');
   const exactEntries = Object.entries(index.exact);
@@ -158,7 +160,7 @@ function generatePrefixIndexCode() {
     lines.push(`  '${k}': ${JSON.stringify(v)}${comma}`);
   }
   lines.push(' },');
-  
+
   // suffix
   lines.push(' suffix: {');
   const suffixEntries = Object.entries(index.suffix);
@@ -168,7 +170,7 @@ function generatePrefixIndexCode() {
     lines.push(`  '${k}': ${JSON.stringify(v)}${comma}`);
   }
   lines.push(' }');
-  
+
   // keyword (如果有)
   if (index.keyword && Object.keys(index.keyword).length > 0) {
     lines[lines.length - 1] = ' },';
@@ -181,12 +183,12 @@ function generatePrefixIndexCode() {
     }
     lines.push(' }');
   }
-  
+
   lines.push('};');
-  
+
   // 添加 findByPrefix 函数（单行压缩）
   lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
-  
+
   return lines.join('\n');
 }
 
@@ -197,7 +199,7 @@ function generateDiagnoseFunction() {
   if (!BUILD_CONFIG.ENABLE_DIAGNOSE) {
     return ''; // 如果不启用诊断，返回空字符串
   }
-  
+
   return `
 // ==========================================
 // 诊断函数 - 在 QX 控制台运行 diagnose() 查看详细匹配信息
@@ -206,19 +208,19 @@ function diagnose(urlToTest) {
   console.log("\\n========================================");
   console.log("UnifiedVIP 诊断工具 v${BUILD_CONFIG.VERSION}");
   console.log("========================================\\n");
-  
+
   const testUrls = urlToTest ? [urlToTest] : [
     "https://yz1018.6vh3qyu9x.com/v2/api/basic/init",
     "https://www.v2ex.com/t/1201518",
     "https://api.gotokeep.com/nuocha/plans"
   ];
-  
+
   // 1. 检查全局变量
   console.log("1. 全局变量检查:");
   console.log("   BUILTIN_MANIFEST 存在:", typeof BUILTIN_MANIFEST !== 'undefined');
   console.log("   PREFIX_INDEX 存在:", typeof PREFIX_INDEX !== 'undefined');
   console.log("   findByPrefix 存在:", typeof findByPrefix === 'function');
-  
+
   if (typeof BUILTIN_MANIFEST !== 'undefined') {
     console.log("   APP总数:", BUILTIN_MANIFEST.total);
     if (BUILTIN_MANIFEST.configs.tv) {
@@ -227,60 +229,60 @@ function diagnose(urlToTest) {
       console.log("   ❌ tv 配置不存在");
     }
   }
-  
+
   // 2. 测试每个 URL
   console.log("\\n2. URL 匹配测试:");
   for (const url of testUrls) {
     console.log("\\n   ----------------------------------------");
     console.log("   测试 URL:", url);
-    
+
     try {
       const hostname = new URL(url).hostname;
       console.log("   提取域名:", hostname);
-      
+
       // 测试 findByPrefix
       if (typeof findByPrefix === 'function') {
         const prefixResult = findByPrefix(hostname);
         if (prefixResult) {
           console.log("   ✅ findByPrefix 成功:", prefixResult.method, "->", JSON.stringify(prefixResult.ids));
-          
+
           // 测试每个候选 APP
           let matched = false;
           for (const id of prefixResult.ids) {
             const cfg = BUILTIN_MANIFEST.configs[id];
             if (!cfg || !cfg.urlPattern) {
-              console.log("      " + id + ": ❌ 无 urlPattern");
+              console.log("     " + id + ": ❌ 无 urlPattern");
               continue;
             }
-            
+
             try {
               const regex = new RegExp(cfg.urlPattern);
               const isMatch = regex.test(url);
-              console.log("      " + id + ":", isMatch ? "✅ 匹配" : "❌ 不匹配");
+              console.log("     " + id + ":", isMatch ? "✅ 匹配" : "❌ 不匹配");
               if (isMatch) {
                 matched = true;
-                console.log("      -> 最终匹配:", id);
+                console.log("     -> 最终匹配:", id);
                 break;
               }
             } catch (e) {
-              console.log("      " + id + ": ❌ 正则错误 -", e.message);
+              console.log("     " + id + ": ❌ 正则错误 -", e.message);
             }
           }
-          
+
           if (!matched) {
-            console.log("   ⚠️  警告: 前缀匹配成功但无 APP 正则匹配");
+            console.log("   ⚠️ 警告: 前缀匹配成功但无 APP 正则匹配");
           }
         } else {
           console.log("   ❌ findByPrefix 返回 null");
           console.log("   🔍 尝试全量扫描...");
-          
+
           // 全量扫描
           for (const [id, cfg] of Object.entries(BUILTIN_MANIFEST.configs)) {
             if (!cfg.urlPattern) continue;
             try {
               const regex = new RegExp(cfg.urlPattern);
               if (regex.test(url)) {
-                console.log("      ✅", id, "匹配成功 (但未通过前缀索引)");
+                console.log("   ✅", id, "匹配成功 (但未通过前缀索引)");
                 break;
               }
             } catch (e) {}
@@ -293,31 +295,31 @@ function diagnose(urlToTest) {
       console.log("   ❌ 错误:", e.message);
     }
   }
-  
+
   // 3. 显示 PREFIX_INDEX 统计
   console.log("\\n3. PREFIX_INDEX 统计:");
   if (typeof PREFIX_INDEX !== 'undefined') {
     console.log("   exact:", Object.keys(PREFIX_INDEX.exact).length);
     console.log("   suffix:", Object.keys(PREFIX_INDEX.suffix).length);
     console.log("   keyword:", Object.keys(PREFIX_INDEX.keyword || {}).length);
-    
+
     if (PREFIX_INDEX.keyword && PREFIX_INDEX.keyword.yz) {
       console.log("   ✅ keyword['yz']:", JSON.stringify(PREFIX_INDEX.keyword.yz));
     } else {
       console.log("   ❌ keyword['yz'] 不存在");
     }
-    
+
     if (PREFIX_INDEX.keyword && PREFIX_INDEX.keyword.v2ex) {
       console.log("   ✅ keyword['v2ex']:", JSON.stringify(PREFIX_INDEX.keyword.v2ex));
     } else {
       console.log("   ❌ keyword['v2ex'] 不存在");
     }
   }
-  
+
   console.log("\\n========================================");
   console.log("诊断结束");
   console.log("========================================\\n");
-  
+
   return { success: true };
 }
 
@@ -404,9 +406,57 @@ ${BUILD_CONFIG.ENABLE_DIAGNOSE ? '# 诊断功能: 在 QX 控制台运行 diagnos
     }
   }
 
+  // ==========================================
+  // 1. 生成 APP 的 script-response-body 规则
+  // ==========================================
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     const name = allConfigs[id]?.name || id;
     conf += `# ${name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+  }
+
+  // ==========================================
+  // 2. 读取并追加自定义 reject-dict 规则
+  // ==========================================
+  const customRejectPath = path.join(RULES_DIR, 'custom-reject.txt');
+  
+  if (fs.existsSync(customRejectPath)) {
+    const customRules = fs.readFileSync(customRejectPath, 'utf8')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#')) // 过滤空行和注释
+      .map(line => {
+        // 确保每条规则包含 url 和 reject 类型
+        if (!line.includes(' url ')) {
+          return `${line} url reject-dict`;
+        }
+        return line;
+      });
+    
+    if (customRules.length > 0) {
+      conf += `# ==========================================\n`;
+      conf += `# 自定义拦截规则 (${customRules.length} 条)\n`;
+      conf += `# 来源: rules/custom-reject.txt\n`;
+      conf += `# ==========================================\n`;
+      conf += customRules.join('\n') + '\n\n';
+      console.log(`  ✅ 已加载 ${customRules.length} 条自定义 reject 规则`);
+    }
+  } else {
+    console.log(`  ℹ️ 未找到 rules/custom-reject.txt，跳过自定义规则`);
+    // 创建模板文件供用户参考
+    const template = `# 自定义 reject-dict 规则文件
+# 每行一条规则，支持正则匹配
+# 以 # 开头的行为注释，会被忽略
+# 如果规则不含 "url "，会自动追加 " url reject-dict"
+
+# TV广告拦截示例：
+# ^https?:\\/\\/(yz\\w{4,6}|cfvip)\\..+\\.com\\/(v2|v1)\\/api\\/(adInfo|vodInfo)\\/(getPageAd|getTextAd|getSearchAd|getVodBodyAd|getVodPauseAd|getUserCenterAd) url reject-dict
+`;
+    try {
+      fs.writeFileSync(customRejectPath, template);
+      console.log(`  📝 已创建 rules/custom-reject.txt 模板文件`);
+    } catch (e) {
+      // 忽略写入错误
+    }
   }
 
   conf += `[mitm]\nhostname = ${hostnames.join(', ')}\n`;
@@ -427,9 +477,9 @@ function build() {
   let allConfigs;
   try {
     allConfigs = getAllConfigs();
-    console.log(`  ✅ 成功读取 ${Object.keys(allConfigs).length} 个配置`);
+    console.log(`   ✅ 成功读取 ${Object.keys(allConfigs).length} 个配置`);
   } catch (e) {
-    console.error(`  ❌ 读取配置失败: ${e.message}`);
+    console.error(`   ❌ 读取配置失败: ${e.message}`);
     process.exit(1);
   }
 
@@ -442,7 +492,7 @@ function build() {
     fs.writeFileSync(path.join(DIST_DIR, 'configs', `${appId}.json`), jsonContent);
     count++;
   }
-  console.log(`  ✅ 生成 ${count} 个配置文件`);
+  console.log(`   ✅ 生成 ${count} 个配置文件`);
 
   // 步骤 3: 加载核心模块
   console.log('📦 步骤 3: 加载核心模块...');
@@ -459,14 +509,14 @@ function build() {
     configLoader: loadModule('engine/config-loader.js'),
     vipEngine: loadModule('engine/vip-engine.js')
   };
-  console.log('  ✅ 加载 11 个核心模块');
+  console.log('   ✅ 加载 11 个核心模块');
 
   // 步骤 4: 组装主脚本
   console.log('📦 步骤 4: 组装主脚本...');
   if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
-    console.log('  ℹ️  诊断函数已启用');
+    console.log('   ℹ️ 诊断函数已启用');
   }
-  
+
   const manifestStr = generateManifestOneLine();
   const prefixCode = generatePrefixIndexCode();
   const diagnoseCode = generateDiagnoseFunction();
@@ -543,82 +593,82 @@ ${diagnoseCode ? '\n// ==========================================\n// 14. 诊断
 // ${diagnoseCode ? '15' : '14'}. 主入口
 // ==========================================
 async function main(){
- const rid=Math.random().toString(36).substr(2,6).toUpperCase();
- try{
- let u='';
- if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
- else if(typeof $response!=='undefined'&&$response)u=$response.url||'';
- if(!u)return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{});
- Logger.info('Main',rid+'|'+u.split('?')[0].substring(0,60));
- const ml=new SimpleManifestLoader(rid),mf=await ml.load(),cid=mf.findMatch(u);
- if(!cid){Logger.info('Main','No match');return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})}
- const cl=new SimpleConfigLoader(rid),cfg=await cl.load(cid,mf.getConfigVersion(cid));
- const env=new Environment(META.name);
- const eng=new VipEngine(env,rid);
- const res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
- Logger.info('Main',rid+' done ['+cfg.mode+']');
- $done(res)
- }catch(e){
- Logger.error('Main',rid+' fail:'+e.message);
- $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})
- }
+  const rid=Math.random().toString(36).substr(2,6).toUpperCase();
+  try{
+    let u='';
+    if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
+    else if(typeof $response!=='undefined'&&$response)u=$response.url||'';
+    if(!u)return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{});
+    Logger.info('Main',rid+'|'+u.split('?')[0].substring(0,60));
+    const ml=new SimpleManifestLoader(rid),mf=await ml.load(),cid=mf.findMatch(u);
+    if(!cid){Logger.info('Main','No match');return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})}
+    const cl=new SimpleConfigLoader(rid),cfg=await cl.load(cid,mf.getConfigVersion(cid));
+    const env=new Environment(META.name);
+    const eng=new VipEngine(env,rid);
+    const res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
+    Logger.info('Main',rid+' done ['+cfg.mode+']');
+    $done(res)
+  }catch(e){
+    Logger.error('Main',rid+' fail:'+e.message);
+    $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})
+  }
 }
 main();
 `;
 
   // 步骤 5: 写入构建产物
   console.log('📦 步骤 5: 写入构建产物...');
-  
+
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
   fs.writeFileSync(outputPath, fullScript);
   const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
-  console.log(`  ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
-  
+  console.log(`   ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
+
   // 验证
   const scriptContent = fs.readFileSync(outputPath, 'utf8');
-  
+
   // 验证 tv pattern
   const tvMatch = scriptContent.match(/"tv":\{"name":"([^"]*)","urlPattern":"([^"]+)"/);
   if (tvMatch) {
-    console.log(`  🔍 tv: ${tvMatch[1]}`);
-    console.log(`  🔍 pattern: ${tvMatch[2].substring(0, 60)}...`);
+    console.log(`   🔍 tv: ${tvMatch[1]}`);
+    console.log(`   🔍 pattern: ${tvMatch[2].substring(0, 60)}...`);
   }
-  
+
   // 验证诊断函数
   if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
     if (scriptContent.includes('function diagnose(')) {
-      console.log(`  ✅ 诊断函数已添加`);
+      console.log(`   ✅ 诊断函数已添加`);
     } else {
-      console.log(`  ❌ 诊断函数缺失`);
+      console.log(`   ❌ 诊断函数缺失`);
     }
   }
-  
+
   const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
   fs.writeFileSync(rewritePath, generateRewriteConf());
   const rewriteSize = (fs.statSync(rewritePath).size / 1024).toFixed(2);
-  console.log(`  ✅ rewrite.conf (${rewriteSize} KB)`);
+  console.log(`   ✅ rewrite.conf (${rewriteSize} KB)`);
 
   console.log('\n📋 构建完成：');
   const distFiles = fs.readdirSync(DIST_DIR);
   distFiles.forEach(file => {
     const stat = fs.statSync(path.join(DIST_DIR, file));
     const size = stat.isDirectory() ? '-' : `${(stat.size / 1024).toFixed(2)} KB`;
-    console.log(`  ${stat.isDirectory() ? '📁' : '📄'} ${file.padEnd(40)} ${size}`);
+    console.log(`   ${stat.isDirectory() ? '📁' : '📄'} ${file.padEnd(40)} ${size}`);
   });
-  
+
   const configCount = fs.readdirSync(path.join(DIST_DIR, 'configs')).filter(f => f.endsWith('.json')).length;
-  console.log(`  📦 configs/*.json (${configCount} 个)`);
+  console.log(`   📦 configs/*.json (${configCount} 个)`);
 
   if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
     console.log('\n📋 诊断功能说明:');
-    console.log('  1. 在 Quantumult X 中运行脚本');
-    console.log('  2. 打开控制台(设置 → 日志)');
-    console.log('  3. 输入: diagnose()');
-    console.log('  4. 查看详细的匹配过程');
+    console.log('   1. 在 Quantumult X 中运行脚本');
+    console.log('   2. 打开控制台(设置 → 日志)');
+    console.log('   3. 输入: diagnose()');
+    console.log('   4. 查看详细的匹配过程');
   }
 
   console.log('\n🚀 发布:');
-  console.log('  git add . && git commit -m "build: update v22" && git push');
+  console.log('   git add . && git commit -m "build: update v22" && git push');
   console.log('\n📎 订阅: https://joeshu.github.io/UnifiedVIP/rewrite.conf');
 }
 
