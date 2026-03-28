@@ -209,6 +209,58 @@ class VipEngine {
     }
   }
 
+  _pickHeaderCaseInsensitive(headers, key) {
+    if (!headers || !key) return undefined;
+    if (headers[key] !== undefined) return headers[key];
+
+    const target = String(key).toLowerCase();
+    for (const [k, v] of Object.entries(headers)) {
+      if (String(k).toLowerCase() === target) return v;
+    }
+    return undefined;
+  }
+
+  _applyRemoteHeaderPolicy(config, sourceHeaders = {}, responseHeaders = {}) {
+    const policy = (config && config.headerPolicy && typeof config.headerPolicy === 'object')
+      ? config.headerPolicy
+      : {};
+
+    const whitelist = Array.isArray(policy.whitelist)
+      ? policy.whitelist
+      : (Array.isArray(config.preserveHeaders) ? config.preserveHeaders : []);
+
+    for (const key of whitelist) {
+      const value = this._pickHeaderCaseInsensitive(sourceHeaders, key);
+      if (value !== undefined) responseHeaders[key] = value;
+    }
+
+    if (policy.passContentType !== false) {
+      const remoteContentType = this._pickHeaderCaseInsensitive(sourceHeaders, 'content-type');
+      if (remoteContentType && !this._pickHeaderCaseInsensitive(responseHeaders, 'content-type')) {
+        responseHeaders['Content-Type'] = remoteContentType;
+      }
+    }
+
+    if (policy.passCacheHeaders === true) {
+      ['cache-control', 'etag', 'last-modified', 'expires'].forEach(k => {
+        const value = this._pickHeaderCaseInsensitive(sourceHeaders, k);
+        if (value !== undefined && this._pickHeaderCaseInsensitive(responseHeaders, k) === undefined) {
+          responseHeaders[k] = value;
+        }
+      });
+    }
+
+    if (config.forceHeaders && typeof config.forceHeaders === 'object') {
+      Object.assign(responseHeaders, config.forceHeaders);
+    }
+
+    if (!this._pickHeaderCaseInsensitive(responseHeaders, 'content-type')) {
+      responseHeaders['Content-Type'] = 'application/json; charset=utf-8';
+    }
+
+    return responseHeaders;
+  }
+
   async _processRemote(config) {
     if (!config.remoteUrl) {
       Logger.error('Remote', 'Missing remoteUrl');
@@ -238,26 +290,11 @@ class VipEngine {
         }
       }
 
-      const responseHeaders = {};
-
-      // 支持 preserveHeaders
-      if (config.preserveHeaders && Array.isArray(config.preserveHeaders)) {
-        const originalHeaders = (typeof $response !== 'undefined' && $response) ?
-          $response.headers : {};
-        for (const key of config.preserveHeaders) {
-          if (originalHeaders[key]) {
-            responseHeaders[key] = originalHeaders[key];
-          }
-        }
-      }
-
-      if (config.forceHeaders && typeof config.forceHeaders === 'object') {
-        Object.assign(responseHeaders, config.forceHeaders);
-      }
-
-      if (!responseHeaders['Content-Type'] && !responseHeaders['content-type']) {
-        responseHeaders['Content-Type'] = 'application/json; charset=utf-8';
-      }
+      const responseHeaders = this._applyRemoteHeaderPolicy(
+        config,
+        response.headers || {},
+        {}
+      );
 
       Logger.info('Remote', `Success: ${response.body.length} bytes`);
       return { headers: responseHeaders, body: response.body };
