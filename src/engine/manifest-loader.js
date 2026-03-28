@@ -7,6 +7,7 @@ class SimpleManifestLoader {
 
     this._urlCacheKey = runtimeCfg.URL_CACHE_KEY || 'url_match_v22_lazy';
     this._urlMetaKey = runtimeCfg.URL_CACHE_META_KEY || `${this._urlCacheKey}_meta`;
+    this._urlCacheMigratedKey = runtimeCfg.URL_CACHE_MIGRATED_KEY || `${this._urlCacheKey}_migrated`;
 
     const legacyKeys = Array.isArray(runtimeCfg.URL_CACHE_LEGACY_KEYS)
       ? runtimeCfg.URL_CACHE_LEGACY_KEYS
@@ -17,11 +18,10 @@ class SimpleManifestLoader {
     this._legacyMetaKeys = [this._urlMetaKey, ...this._legacyUrlCacheKeys.map(k => `${k}_meta`)]
       .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
 
-    this._cacheTtlMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_TTL_MS, 3600000); // 1h
-    this._persistIntervalMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_PERSIST_INTERVAL_MS, 15000); // 15s
+    this._cacheTtlMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_TTL_MS, 3600000);
+    this._persistIntervalMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_PERSIST_INTERVAL_MS, 15000);
     this._persistLimit = Math.max(10, Math.min(200, Math.floor(this._readPositiveNumber(runtimeCfg.URL_CACHE_LIMIT, 50))));
 
-    // 命中统计（QX）
     this._statsKey = runtimeCfg.MATCH_STATS_KEY || 'uvip_match_stats_v1';
     this._statsMetaKey = runtimeCfg.MATCH_STATS_META_KEY || `${this._statsKey}_meta`;
     this._statsFlushIntervalMs = this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_INTERVAL_MS, 60000);
@@ -31,25 +31,26 @@ class SimpleManifestLoader {
     this._statsPending = 0;
 
     this._regexCache = new Map();
-
-    // 前缀索引（构建时注入）
     this._prefixIndex = typeof PREFIX_INDEX !== 'undefined' ? PREFIX_INDEX : {};
-
-    // 延迟配置
     this._lazyConfigs = typeof BUILTIN_MANIFEST !== 'undefined' ? BUILTIN_MANIFEST.configs : {};
-
     this._persistMeta = this._loadPersistMeta();
+    this._hostTokenIndex = this._buildHostTokenIndex();
 
-    // 恢复缓存（兼容旧 key）
     if (this._urlCache && typeof $prefs !== 'undefined') {
-      const { raw, keyUsed } = this._readFirstAvailable(this._legacyUrlCacheKeys);
+      const migrated = this._isLegacyMigrated();
+      const lookupKeys = migrated ? [this._urlCacheKey] : this._legacyUrlCacheKeys;
+      const { raw, keyUsed } = this._readFirstAvailable(lookupKeys);
+
       if (raw) {
         this._restoreUrlCache(raw);
+      }
 
-        // 如果来自旧 key，尽快迁移到新 key（受节流控制）
-        if (keyUsed && keyUsed !== this._urlCacheKey) {
+      if (!migrated) {
+        if (raw && keyUsed && keyUsed !== this._urlCacheKey) {
           this._saveUrlCache(true);
         }
+        this._cleanupLegacyKeys();
+        this._markLegacyMigrated();
       }
     }
   }
@@ -72,6 +73,35 @@ class SimpleManifestLoader {
     return { raw: null, keyUsed: null };
   }
 
+  _isLegacyMigrated() {
+    if (typeof $prefs === 'undefined') return true;
+    try {
+      return $prefs.valueForKey(this._urlCacheMigratedKey) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _markLegacyMigrated() {
+    if (typeof $prefs === 'undefined') return;
+    try {
+      $prefs.setValueForKey(this._urlCacheMigratedKey, '1');
+    } catch (e) {}
+  }
+
+  _cleanupLegacyKeys() {
+    if (typeof $prefs === 'undefined') return;
+
+    const keysToDelete = [
+      ...this._legacyUrlCacheKeys.filter(k => k !== this._urlCacheKey),
+      ...this._legacyMetaKeys.filter(k => k !== this._urlMetaKey)
+    ];
+
+    for (const key of keysToDelete) {
+      try { $prefs.removeValueForKey(key); } catch (e) {}
+    }
+  }
+
   _restoreUrlCache(raw) {
     try {
       const parsed = JSON.parse(raw);
@@ -89,9 +119,7 @@ class SimpleManifestLoader {
   }
 
   _loadPersistMeta() {
-    if (typeof $prefs === 'undefined') {
-      return { lastPersistAt: 0 };
-    }
+    if (typeof $prefs === 'undefined') return { lastPersistAt: 0 };
 
     const { raw } = this._readFirstAvailable(this._legacyMetaKeys);
     if (!raw) return { lastPersistAt: 0 };
@@ -107,9 +135,7 @@ class SimpleManifestLoader {
   }
 
   _loadStatsMeta() {
-    if (typeof $prefs === 'undefined') {
-      return { lastFlushAt: 0 };
-    }
+    if (typeof $prefs === 'undefined') return { lastFlushAt: 0 };
 
     try {
       const raw = $prefs.valueForKey(this._statsMetaKey);
@@ -131,6 +157,7 @@ class SimpleManifestLoader {
       suffix: 0,
       keyword: 0,
       fallback: 0,
+      tokenNarrow: 0,
       missPrefix: 0,
       missRegex: 0,
       invalidPattern: 0,
@@ -176,6 +203,48 @@ class SimpleManifestLoader {
     } catch (e) {}
   }
 
+  _buildHostTokenIndex() {
+    const index = {};
+    const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
+
+    for (const [id, cfg] of Object.entries(this._lazyConfigs || {})) {
+      const pattern = cfg && cfg.urlPattern;
+      if (!pattern || typeof pattern !== 'string') continue;
+
+      const hosts = pattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+      for (const host of hosts) {
+        const tokens = host.toLowerCase().split('.').filter(Boolean);
+        for (const tk of tokens) {
+          if (tk.length < 3 || ignored.has(tk)) continue;
+          if (!index[tk]) index[tk] = new Set();
+          index[tk].add(id);
+        }
+      }
+    }
+
+    const compact = {};
+    for (const [tk, set] of Object.entries(index)) {
+      compact[tk] = Array.from(set);
+    }
+    return compact;
+  }
+
+  _findByHostToken(hostname) {
+    const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
+    const candidates = new Set();
+    const tokens = String(hostname || '').toLowerCase().split('.').filter(Boolean);
+
+    for (const tk of tokens) {
+      if (tk.length < 3 || ignored.has(tk)) continue;
+      const ids = this._hostTokenIndex[tk];
+      if (Array.isArray(ids)) {
+        ids.forEach(id => candidates.add(id));
+      }
+    }
+
+    return Array.from(candidates);
+  }
+
   _buildUrlCacheKey(url) {
     const method = (typeof $request !== 'undefined' && $request && $request.method)
       ? String($request.method).toUpperCase()
@@ -190,9 +259,7 @@ class SimpleManifestLoader {
   }
 
   _findByPrefix(hostname) {
-    if (typeof findByPrefix === 'function') {
-      return findByPrefix(hostname);
-    }
+    if (typeof findByPrefix === 'function') return findByPrefix(hostname);
 
     const h = hostname.toLowerCase();
     if (this._prefixIndex.exact && this._prefixIndex.exact[h]) {
@@ -219,9 +286,7 @@ class SimpleManifestLoader {
     if (!this._urlCache || typeof $prefs === 'undefined') return;
 
     const now = Date.now();
-    if (!force && (now - this._persistMeta.lastPersistAt) < this._persistIntervalMs) {
-      return;
-    }
+    if (!force && (now - this._persistMeta.lastPersistAt) < this._persistIntervalMs) return;
 
     const entries = Object.entries(this._urlCache)
       .filter(([, v]) => v && typeof v.ts === 'number' && (now - v.ts) < this._cacheTtlMs)
@@ -243,7 +308,6 @@ class SimpleManifestLoader {
     const changed = !prev || prev.id !== id;
 
     this._urlCache[cacheKey] = { id, ts: now };
-
     this._saveUrlCache(changed);
   }
 
@@ -259,7 +323,6 @@ class SimpleManifestLoader {
       findMatch: (url) => {
         const cacheKey = self._buildUrlCacheKey(url);
 
-        // L0: URL缓存
         if (self._urlCache) {
           const cached = self._urlCache[cacheKey];
           if (cached && (Date.now() - cached.ts) < self._cacheTtlMs) {
@@ -271,34 +334,38 @@ class SimpleManifestLoader {
         }
         self._incrementStat('cacheMiss');
 
-        // L1: 前缀索引
         let candidates = [];
-        let matchInfo = null;
 
         try {
           const hostname = new URL(url).hostname;
-          matchInfo = self._findByPrefix(hostname);
+          const matchInfo = self._findByPrefix(hostname);
+
           if (matchInfo) {
             candidates = matchInfo.ids;
             self._incrementStat(matchInfo.method);
             Logger.debug('ManifestLoader', `Prefix ${matchInfo.method}: ${matchInfo.matched}`);
           } else {
             self._incrementStat('missPrefix');
-            Logger.debug('ManifestLoader', 'MISS_PREFIX: no prefix index match');
+            const tokenCandidates = self._findByHostToken(hostname);
+            if (tokenCandidates.length > 0) {
+              candidates = tokenCandidates;
+              self._incrementStat('tokenNarrow');
+              Logger.debug('ManifestLoader', `Token narrow: ${hostname} -> ${tokenCandidates.length}`);
+            } else {
+              Logger.debug('ManifestLoader', 'MISS_PREFIX: no prefix/token match');
+            }
           }
         } catch (e) {
           self._incrementStat('urlParseFail');
           Logger.debug('ManifestLoader', 'URL_PARSE_FAIL: parse url failed');
         }
 
-        // L2: 全量回退
         if (candidates.length === 0) {
           self._incrementStat('fallback');
           candidates = Object.keys(self._lazyConfigs);
           Logger.debug('ManifestLoader', `Fallback: scanning ${candidates.length} patterns`);
         }
 
-        // L3: 延迟编译+匹配
         for (const id of candidates) {
           let regex = self._regexCache.get(id);
 
@@ -318,31 +385,23 @@ class SimpleManifestLoader {
 
           if (regex && regex.test(url)) {
             Logger.info('ManifestLoader', `Matched: ${id} (${self._regexCache.size}/${candidates.length})`);
-
-            if (self._urlCache) {
-              self._touchUrlCache(cacheKey, id);
-            }
+            if (self._urlCache) self._touchUrlCache(cacheKey, id);
             return id;
           }
         }
 
         self._incrementStat('missRegex');
-        Logger.warn('ManifestLoader', `MISS_REGEX: No match for ${url.substring(0,40)}...`);
+        Logger.warn('ManifestLoader', `MISS_REGEX: No match for ${url.substring(0, 40)}...`);
         return null;
       },
 
-      getConfigVersion: (configId) => {
-        return self._lazyConfigs[configId] ? '1.0' : null;
-      },
-
+      getConfigVersion: (configId) => (self._lazyConfigs[configId] ? '1.0' : null),
       getStats: () => ({ ...self._stats }),
-
       flushStats: () => self._flushStats(true)
     };
   }
 }
 
-// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { SimpleManifestLoader };
 }
