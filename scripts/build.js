@@ -18,7 +18,7 @@ const BUILD_CONFIG = {
 
   // 可选手动版本后缀，例如 'lazy' / 'beta'
   // 留空 '' 则使用 package.json.version 原始版本
-  VERSION_TAG: '',
+  VERSION_TAG: '0328',
 
   // 版本号（单一来源：package.json，可拼接手动后缀）
   get VERSION() {
