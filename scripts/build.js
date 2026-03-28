@@ -97,6 +97,10 @@ const CONFIG = {
   DEBUG: ${debugFlag},
   VERBOSE_PATTERN_LOG: ${verboseFlag},
 
+  // 日志采样（QX）
+  LOG_SAMPLE_RATE: 0.2,
+  LOG_ALWAYS_TAGS: ['Main', 'VipEngine', 'Forward', 'Remote', 'ManifestLoader'],
+
   // URL 匹配缓存（QX）
   URL_CACHE_KEY: 'url_match_v22_lazy',
   URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
@@ -639,6 +643,7 @@ async function main(){
     let u='';
     if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
     else if(typeof $response!=='undefined'&&$response)u=$response.url||'';
+
     if(!u)return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{});
     Logger.info('Main',rid+'|'+u.split('?')[0].substring(0,60));
     const ml=new SimpleManifestLoader(rid),mf=await ml.load(),cid=mf.findMatch(u);
