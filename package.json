@@ -18,5 +18,8 @@
     "release:minor": "npm version minor && git push && git push --tags",
     "release:major": "npm version major && git push && git push --tags",
     "release:beta": "npm version prerelease --preid=beta && git push && git push --tags"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1"
   }
 }
