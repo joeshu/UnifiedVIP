@@ -12,13 +12,23 @@ class SimpleManifestLoader {
       ? runtimeCfg.URL_CACHE_LEGACY_KEYS
       : ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'];
 
-    this._legacyUrlCacheKeys = [this._urlCacheKey, ...legacyKeys].filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
+    this._legacyUrlCacheKeys = [this._urlCacheKey, ...legacyKeys]
+      .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
     this._legacyMetaKeys = [this._urlMetaKey, ...this._legacyUrlCacheKeys.map(k => `${k}_meta`)]
       .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
 
     this._cacheTtlMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_TTL_MS, 3600000); // 1h
     this._persistIntervalMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_PERSIST_INTERVAL_MS, 15000); // 15s
     this._persistLimit = Math.max(10, Math.min(200, Math.floor(this._readPositiveNumber(runtimeCfg.URL_CACHE_LIMIT, 50))));
+
+    // 命中统计（QX）
+    this._statsKey = runtimeCfg.MATCH_STATS_KEY || 'uvip_match_stats_v1';
+    this._statsMetaKey = runtimeCfg.MATCH_STATS_META_KEY || `${this._statsKey}_meta`;
+    this._statsFlushIntervalMs = this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_INTERVAL_MS, 60000);
+    this._statsFlushEveryN = Math.max(10, Math.floor(this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_EVERY_N, 20)));
+    this._statsMeta = this._loadStatsMeta();
+    this._stats = this._loadStats();
+    this._statsPending = 0;
 
     this._regexCache = new Map();
 
@@ -96,6 +106,76 @@ class SimpleManifestLoader {
     return { lastPersistAt: 0 };
   }
 
+  _loadStatsMeta() {
+    if (typeof $prefs === 'undefined') {
+      return { lastFlushAt: 0 };
+    }
+
+    try {
+      const raw = $prefs.valueForKey(this._statsMetaKey);
+      if (!raw) return { lastFlushAt: 0 };
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.lastFlushAt === 'number') {
+        return { lastFlushAt: parsed.lastFlushAt };
+      }
+    } catch (e) {}
+
+    return { lastFlushAt: 0 };
+  }
+
+  _loadStats() {
+    const defaults = {
+      cacheHit: 0,
+      cacheMiss: 0,
+      exact: 0,
+      suffix: 0,
+      keyword: 0,
+      fallback: 0,
+      missPrefix: 0,
+      missRegex: 0,
+      invalidPattern: 0,
+      urlParseFail: 0,
+      updatedAt: Date.now()
+    };
+
+    if (typeof $prefs === 'undefined') return defaults;
+
+    try {
+      const raw = $prefs.valueForKey(this._statsKey);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return defaults;
+      return { ...defaults, ...parsed, updatedAt: Date.now() };
+    } catch (e) {
+      return defaults;
+    }
+  }
+
+  _incrementStat(key, delta = 1) {
+    if (!this._stats || typeof this._stats !== 'object') return;
+    this._stats[key] = (this._stats[key] || 0) + delta;
+    this._stats.updatedAt = Date.now();
+    this._statsPending += 1;
+    this._flushStats(false);
+  }
+
+  _flushStats(force = false) {
+    if (typeof $prefs === 'undefined' || !this._stats) return;
+
+    const now = Date.now();
+    const reachCount = this._statsPending >= this._statsFlushEveryN;
+    const reachTime = (now - (this._statsMeta.lastFlushAt || 0)) >= this._statsFlushIntervalMs;
+
+    if (!force && !reachCount && !reachTime) return;
+
+    try {
+      $prefs.setValueForKey(this._statsKey, JSON.stringify(this._stats));
+      this._statsMeta.lastFlushAt = now;
+      $prefs.setValueForKey(this._statsMetaKey, JSON.stringify(this._statsMeta));
+      this._statsPending = 0;
+    } catch (e) {}
+  }
+
   _buildUrlCacheKey(url) {
     const method = (typeof $request !== 'undefined' && $request && $request.method)
       ? String($request.method).toUpperCase()
@@ -114,7 +194,6 @@ class SimpleManifestLoader {
       return findByPrefix(hostname);
     }
 
-    // 内联实现（备用）
     const h = hostname.toLowerCase();
     if (this._prefixIndex.exact && this._prefixIndex.exact[h]) {
       return { ids: this._prefixIndex.exact[h], method: 'exact', matched: h };
@@ -165,7 +244,6 @@ class SimpleManifestLoader {
 
     this._urlCache[cacheKey] = { id, ts: now };
 
-    // 映射变化立即落盘，未变化按节流间隔刷新热度
     this._saveUrlCache(changed);
   }
 
@@ -186,10 +264,12 @@ class SimpleManifestLoader {
           const cached = self._urlCache[cacheKey];
           if (cached && (Date.now() - cached.ts) < self._cacheTtlMs) {
             Logger.info('ManifestLoader', `Cache hit: ${cached.id}`);
+            self._incrementStat('cacheHit');
             self._touchUrlCache(cacheKey, cached.id);
             return cached.id;
           }
         }
+        self._incrementStat('cacheMiss');
 
         // L1: 前缀索引
         let candidates = [];
@@ -200,14 +280,20 @@ class SimpleManifestLoader {
           matchInfo = self._findByPrefix(hostname);
           if (matchInfo) {
             candidates = matchInfo.ids;
+            self._incrementStat(matchInfo.method);
             Logger.debug('ManifestLoader', `Prefix ${matchInfo.method}: ${matchInfo.matched}`);
+          } else {
+            self._incrementStat('missPrefix');
+            Logger.debug('ManifestLoader', 'MISS_PREFIX: no prefix index match');
           }
         } catch (e) {
-          Logger.debug('ManifestLoader', 'URL parse failed');
+          self._incrementStat('urlParseFail');
+          Logger.debug('ManifestLoader', 'URL_PARSE_FAIL: parse url failed');
         }
 
         // L2: 全量回退
         if (candidates.length === 0) {
+          self._incrementStat('fallback');
           candidates = Object.keys(self._lazyConfigs);
           Logger.debug('ManifestLoader', `Fallback: scanning ${candidates.length} patterns`);
         }
@@ -224,7 +310,8 @@ class SimpleManifestLoader {
               regex = new RegExp(patternStr);
               self._regexCache.set(id, regex);
             } catch (e) {
-              Logger.error('ManifestLoader', `Invalid regex ${id}`);
+              self._incrementStat('invalidPattern');
+              Logger.error('ManifestLoader', `INVALID_PATTERN: ${id}`);
               continue;
             }
           }
@@ -235,18 +322,22 @@ class SimpleManifestLoader {
             if (self._urlCache) {
               self._touchUrlCache(cacheKey, id);
             }
-
             return id;
           }
         }
 
-        Logger.warn('ManifestLoader', `No match for ${url.substring(0,40)}...`);
+        self._incrementStat('missRegex');
+        Logger.warn('ManifestLoader', `MISS_REGEX: No match for ${url.substring(0,40)}...`);
         return null;
       },
 
       getConfigVersion: (configId) => {
         return self._lazyConfigs[configId] ? '1.0' : null;
-      }
+      },
+
+      getStats: () => ({ ...self._stats }),
+
+      flushStats: () => self._flushStats(true)
     };
   }
 }
