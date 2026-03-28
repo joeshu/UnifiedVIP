@@ -22,19 +22,20 @@ class SimpleManifestLoader {
     this._persistIntervalMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_PERSIST_INTERVAL_MS, 15000);
     this._persistLimit = Math.max(10, Math.min(200, Math.floor(this._readPositiveNumber(runtimeCfg.URL_CACHE_LIMIT, 50))));
 
+    this._statsEnabled = runtimeCfg.ENABLE_MATCH_STATS === true;
     this._statsKey = runtimeCfg.MATCH_STATS_KEY || 'uvip_match_stats_v1';
     this._statsMetaKey = runtimeCfg.MATCH_STATS_META_KEY || `${this._statsKey}_meta`;
     this._statsFlushIntervalMs = this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_INTERVAL_MS, 60000);
     this._statsFlushEveryN = Math.max(10, Math.floor(this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_EVERY_N, 20)));
-    this._statsMeta = this._loadStatsMeta();
-    this._stats = this._loadStats();
+    this._statsMeta = this._statsEnabled ? this._loadStatsMeta() : { lastFlushAt: 0 };
+    this._stats = this._statsEnabled ? this._loadStats() : null;
     this._statsPending = 0;
 
     this._regexCache = new Map();
     this._prefixIndex = typeof PREFIX_INDEX !== 'undefined' ? PREFIX_INDEX : {};
     this._lazyConfigs = typeof BUILTIN_MANIFEST !== 'undefined' ? BUILTIN_MANIFEST.configs : {};
     this._persistMeta = this._loadPersistMeta();
-    this._hostTokenIndex = this._buildHostTokenIndex();
+    this._hostTokenIndex = null;
 
     if (this._urlCache && typeof $prefs !== 'undefined') {
       const migrated = this._isLegacyMigrated();
@@ -179,6 +180,7 @@ class SimpleManifestLoader {
   }
 
   _incrementStat(key, delta = 1) {
+    if (!this._statsEnabled) return;
     if (!this._stats || typeof this._stats !== 'object') return;
     this._stats[key] = (this._stats[key] || 0) + delta;
     this._stats.updatedAt = Date.now();
@@ -187,6 +189,7 @@ class SimpleManifestLoader {
   }
 
   _flushStats(force = false) {
+    if (!this._statsEnabled) return;
     if (typeof $prefs === 'undefined' || !this._stats) return;
 
     const now = Date.now();
@@ -230,6 +233,10 @@ class SimpleManifestLoader {
   }
 
   _findByHostToken(hostname) {
+    if (!this._hostTokenIndex) {
+      this._hostTokenIndex = this._buildHostTokenIndex();
+    }
+
     const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
     const candidates = new Set();
     const tokens = String(hostname || '').toLowerCase().split('.').filter(Boolean);
@@ -312,7 +319,7 @@ class SimpleManifestLoader {
   }
 
   async load() {
-    Logger.info('ManifestLoader', `Lazy load v${BUILTIN_MANIFEST?.version || '22.0.0'}`);
+    Logger.debug('ManifestLoader', `Lazy load v${BUILTIN_MANIFEST?.version || '22.0.0'}`);
     return this._createLazyProxy();
   }
 
@@ -326,7 +333,7 @@ class SimpleManifestLoader {
         if (self._urlCache) {
           const cached = self._urlCache[cacheKey];
           if (cached && (Date.now() - cached.ts) < self._cacheTtlMs) {
-            Logger.info('ManifestLoader', `Cache hit: ${cached.id}`);
+            Logger.debug('ManifestLoader', `Cache hit: ${cached.id}`);
             self._incrementStat('cacheHit');
             self._touchUrlCache(cacheKey, cached.id);
             return cached.id;
@@ -384,7 +391,7 @@ class SimpleManifestLoader {
           }
 
           if (regex && regex.test(url)) {
-            Logger.info('ManifestLoader', `Matched: ${id} (${self._regexCache.size}/${candidates.length})`);
+            Logger.debug('ManifestLoader', `Matched: ${id} (${self._regexCache.size}/${candidates.length})`);
             if (self._urlCache) self._touchUrlCache(cacheKey, id);
             return id;
           }
