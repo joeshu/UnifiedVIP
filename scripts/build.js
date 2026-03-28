@@ -9,17 +9,21 @@ const pkg = require('../package.json');
 const BuildGenerators = require('./build/generators');
 
 // ==========================================
-// 构建配置开关
+// 构建配置开关（手动编辑这里，不依赖环境变量）
 // ==========================================
 const BUILD_CONFIG = {
-  // 是否启用诊断功能（生产环境设为 false，调试设为 true）
-  ENABLE_DIAGNOSE: process.env.DIAGNOSE === '1',
+  // 手动开关：true=开启，false=关闭
+  ENABLE_DIAGNOSE: false,
+  DEBUG_MODE: false,
 
-  // 是否开启 DEBUG 模式（生产环境默认关闭，可通过 DEBUG=1 开启）
-  DEBUG_MODE: process.env.DEBUG === '1',
+  // 可选手动版本后缀，例如 'lazy' / 'beta'
+  // 留空 '' 则使用 package.json.version 原始版本
+  VERSION_TAG: '',
 
-  // 版本号（单一来源：package.json；可选 BUILD_TAG 附加后缀）
-  VERSION: process.env.BUILD_TAG ? `${pkg.version}-${process.env.BUILD_TAG}` : pkg.version
+  // 版本号（单一来源：package.json，可拼接手动后缀）
+  get VERSION() {
+    return this.VERSION_TAG ? `${pkg.version}-${this.VERSION_TAG}` : pkg.version;
+  }
 };
 
 const SRC_DIR = path.join(__dirname, '../src');
