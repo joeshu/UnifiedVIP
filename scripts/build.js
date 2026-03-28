@@ -11,10 +11,10 @@ const path = require('path');
 // ==========================================
 const BUILD_CONFIG = {
   // 是否启用诊断功能（生产环境设为 false，调试设为 true）
-  ENABLE_DIAGNOSE: false,
+  ENABLE_DIAGNOSE: process.env.DIAGNOSE === '1',
 
-  // 是否开启 DEBUG 模式（生产环境设为 false）
-  DEBUG_MODE: true,
+  // 是否开启 DEBUG 模式（生产环境默认关闭，可通过 DEBUG=1 开启）
+  DEBUG_MODE: process.env.DEBUG === '1',
 
   // 版本号
   VERSION: '22.0.0-Lazy'
@@ -347,7 +347,31 @@ if (typeof $request !== 'undefined') {
 // 生成 rewrite.conf
 // ==========================================
 function generateRewriteConf() {
-  const hostnames = [
+  const autoHostSet = new Set();
+
+  // 从配置自动提取 hostname（仅提取明确域名，过滤通配和IP段）
+  for (const cfg of Object.values(APP_REGISTRY)) {
+    if (!cfg || !cfg.urlPattern || typeof cfg.urlPattern !== 'string') continue;
+
+    const pattern = cfg.urlPattern;
+    const hostMatches = pattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+
+    for (const host of hostMatches) {
+      const h = host.toLowerCase();
+      if (h.includes('\\/')) continue;
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) continue;
+      if (h.includes('.*')) continue;
+      if (h.startsWith('www.')) {
+        autoHostSet.add(h);
+        autoHostSet.add(h.slice(4));
+      } else {
+        autoHostSet.add(h);
+      }
+    }
+  }
+
+  // 手工补丁列表（保留原有复杂/通配规则）
+  const manualHosts = [
     '59.82.99.78',
     '*.ipalfish.com',
     'service.hhdd.com',
@@ -393,7 +417,9 @@ function generateRewriteConf() {
     'yr-game-api.feigo.fun',
     'star.jvplay.cn',
     'iotpservice.smartont.net'
-  ].sort();
+  ];
+
+  const hostnames = Array.from(new Set([...manualHosts, ...Array.from(autoHostSet)])).sort();
 
   let conf = `# Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}
 # 构建时间: ${new Date().toISOString()}
