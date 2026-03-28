@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 function generateHeaderMinified({ BUILD_CONFIG, APP_REGISTRY }) {
   const debugFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
@@ -60,8 +61,14 @@ function generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG }) {
     }
   }
 
+  const manifestSourceHash = crypto
+    .createHash('md5')
+    .update(JSON.stringify(configs))
+    .digest('hex')
+    .slice(0, 8);
+
   return JSON.stringify({
-    version: BUILD_CONFIG.VERSION,
+    version: `${BUILD_CONFIG.VERSION}-${manifestSourceHash}`,
     updated: new Date().toISOString().split('T')[0],
     total: Object.keys(configs).length,
     configs
