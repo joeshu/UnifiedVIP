@@ -1,170 +1,284 @@
+#!/usr/bin/env node
+
+// scripts/build.js
+// 构建脚本 - 生成 Unified_VIP_Unlock_Manager_v22.js 和 rewrite.conf
+
 const fs = require('fs');
 const path = require('path');
-
-function generateHeaderMinified({ BUILD_CONFIG, APP_REGISTRY }) {
-  const debugFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
-  const verboseFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
-
-  return `/*
- * ==========================================
- * Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}
- * 构建时间: ${new Date().toISOString()}
- * APP数量: ${Object.keys(APP_REGISTRY).length}
- * ==========================================
- *
- * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
-${BUILD_CONFIG.ENABLE_DIAGNOSE ? ' * 诊断功能: 在 QX 控制台运行 diagnose() 查看详细匹配信息' : ''}
- */
-
-'use strict';
+const pkg = require('../package.json');
+const BuildGenerators = require('./build/generators');
 
 // ==========================================
-// 0. 环境修复 & 配置
+// 构建配置开关（手动编辑这里，不依赖环境变量）
 // ==========================================
-if (typeof console === 'undefined') { globalThis.console = { log: () => {} }; }
+const BUILD_CONFIG = {
+  // 手动开关：true=开启，false=关闭
+  ENABLE_DIAGNOSE: false,
+  DEBUG_MODE: true,
 
-const CONFIG = {
-  REMOTE_BASE: 'https://joeshu.github.io/UnifiedVIP',
-  CONFIG_CACHE_TTL: 24 * 60 * 60 * 1000,
-  MAX_BODY_SIZE: 5 * 1024 * 1024,
-  MAX_PROCESSORS_PER_REQUEST: 30,
-  TIMEOUT: 10,
-  DEBUG: ${debugFlag},
-  VERBOSE_PATTERN_LOG: ${verboseFlag},
+  // 可选手动版本后缀，例如 'lazy' / 'beta'
+  // 留空 '' 则使用 package.json.version 原始版本
+  VERSION_TAG: '0328',
 
-  // 日志采样（QX）
-  LOG_SAMPLE_RATE: 0.2,
-  LOG_ALWAYS_TAGS: ['Main', 'VipEngine', 'Forward', 'Remote', 'ManifestLoader'],
-
-  // URL 匹配缓存（QX）
-  URL_CACHE_KEY: 'url_match_v22_lazy',
-  URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
-  URL_CACHE_MIGRATED_KEY: 'url_match_v22_lazy_migrated',
-  URL_CACHE_LEGACY_KEYS: ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'],
-  URL_CACHE_TTL_MS: 60 * 60 * 1000,
-  URL_CACHE_PERSIST_INTERVAL_MS: 15 * 1000,
-  URL_CACHE_LIMIT: 50,
-
-  // 命中统计（QX，节流写入）
-  MATCH_STATS_KEY: 'uvip_match_stats_v1',
-  MATCH_STATS_META_KEY: 'uvip_match_stats_v1_meta',
-  MATCH_STATS_FLUSH_INTERVAL_MS: 60 * 1000,
-  MATCH_STATS_FLUSH_EVERY_N: 20
+  // 版本号（单一来源：package.json，可拼接手动后缀）
+  get VERSION() {
+    return this.VERSION_TAG ? `${pkg.version}-${this.VERSION_TAG}` : pkg.version;
+  }
 };
 
-const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
+const SRC_DIR = path.join(__dirname, '../src');
+const DIST_DIR = path.join(__dirname, '../dist');
+const CONFIGS_DIR = path.join(__dirname, '../configs');
+const RULES_DIR = path.join(__dirname, '../rules');
+
+// ==========================================
+// 步骤 0: 清理并创建目录
+// ==========================================
+console.log('📂 步骤 0: 准备目录...');
+
+if (fs.existsSync(DIST_DIR)) {
+  fs.rmSync(DIST_DIR, { recursive: true, force: true });
+  console.log('  🗑️ 清理旧 dist/ 目录');
 }
 
-function generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG }) {
-  const configs = {};
-  for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
-    const configPath = path.join(CONFIGS_DIR, `${id}.json`);
-    if (fs.existsSync(configPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        configs[id] = { name: config.name || id, urlPattern: config.urlPattern };
-      } catch (e) {
-        configs[id] = { name: id, urlPattern: baseCfg.urlPattern };
-      }
-    } else {
-      configs[id] = { name: id, urlPattern: baseCfg.urlPattern };
-    }
+fs.mkdirSync(DIST_DIR, { recursive: true });
+fs.mkdirSync(path.join(DIST_DIR, 'configs'), { recursive: true });
+fs.mkdirSync(CONFIGS_DIR, { recursive: true });
+console.log('  ✅ 创建 dist/ 和 dist/configs/');
+
+// 确保 rules/ 目录存在（用于自定义 reject 规则）
+if (!fs.existsSync(RULES_DIR)) {
+  fs.mkdirSync(RULES_DIR, { recursive: true });
+  console.log('  ⚠️ 创建 rules/ 目录（可放置 custom-reject.txt）');
+}
+
+// ==========================================
+// 加载 APP 注册表和前缀索引生成器
+// ==========================================
+const { APP_REGISTRY, getAllConfigs } = require('../src/apps/_index');
+const { generatePrefixIndex } = require('../src/apps/_prefix-index');
+
+// ==========================================
+// 辅助函数: 加载核心模块并移除 CommonJS 导出
+// ==========================================
+function loadModule(filename) {
+  const content = fs.readFileSync(path.join(SRC_DIR, filename), 'utf8');
+  return content.replace(/\/\/ CommonJS导出[\s\S]*$/, '').trim();
+}
+
+// ==========================================
+// 主构建流程
+// ==========================================
+function build() {
+  console.log(`\n🔨 构建 UnifiedVIP v${BUILD_CONFIG.VERSION}`);
+  console.log(`   诊断功能: ${BUILD_CONFIG.ENABLE_DIAGNOSE ? '✅ 启用' : '❌ 禁用'}`);
+  console.log(`   DEBUG模式: ${BUILD_CONFIG.DEBUG_MODE ? '✅ 启用' : '❌ 禁用'}\n`);
+
+  // 步骤 1: 读取配置
+  console.log('📦 步骤 1: 读取配置...');
+  let allConfigs;
+  try {
+    allConfigs = getAllConfigs();
+    console.log(`   ✅ 成功读取 ${Object.keys(allConfigs).length} 个配置`);
+  } catch (e) {
+    console.error(`   ❌ 读取配置失败: ${e.message}`);
+    process.exit(1);
   }
 
-  return JSON.stringify({
-    version: BUILD_CONFIG.VERSION,
-    updated: new Date().toISOString().split('T')[0],
-    total: Object.keys(configs).length,
-    configs
-  });
-}
+  // 步骤 2: 生成 configs
+  console.log('📦 步骤 2: 生成 configs/*.json...');
+  let count = 0;
+  for (const [appId, config] of Object.entries(allConfigs)) {
+    const jsonContent = JSON.stringify(config, null, 2);
+    fs.writeFileSync(path.join(CONFIGS_DIR, `${appId}.json`), jsonContent);
+    fs.writeFileSync(path.join(DIST_DIR, 'configs', `${appId}.json`), jsonContent);
+    count++;
+  }
+  console.log(`   ✅ 生成 ${count} 个配置文件`);
 
-function generatePrefixIndexCode(index) {
-  const lines = ['const PREFIX_INDEX = {'];
-  const emitGroup = (name, data, withComma = true) => {
-    lines.push(` ${name}: {`);
-    const entries = Object.entries(data || {});
-    entries.forEach(([k, v], i) => {
-      const comma = i < entries.length - 1 ? ',' : '';
-      lines.push(`  '${k}': ${JSON.stringify(v)}${comma}`);
-    });
-    lines.push(withComma ? ' },' : ' }');
+  // 步骤 3: 加载核心模块
+  console.log('📦 步骤 3: 加载核心模块...');
+  const modules = {
+    platform: loadModule('core/platform.js'),
+    logger: loadModule('core/logger.js'),
+    storage: loadModule('core/storage.js'),
+    http: loadModule('core/http.js'),
+    utils: loadModule('core/utils.js'),
+    regexPool: loadModule('engine/regex-pool.js'),
+    processorFactory: loadModule('engine/processor-factory.js'),
+    compiler: loadModule('engine/compiler.js'),
+    manifestLoader: loadModule('engine/manifest-loader.js'),
+    configLoader: loadModule('engine/config-loader.js'),
+    vipEngine: loadModule('engine/vip-engine.js')
   };
+  console.log('   ✅ 加载 11 个核心模块');
 
-  emitGroup('exact', index.exact || {});
-  emitGroup('suffix', index.suffix || !(index.keyword && Object.keys(index.keyword).length));
-
-  if (index.keyword && Object.keys(index.keyword).length > 0) {
-    if (lines[lines.length - 1] === ' }') lines[lines.length - 1] = ' },';
-    emitGroup('keyword', index.keyword || {}, false);
+  // 步骤 4: 组装主脚本
+  console.log('📦 步骤 4: 组装主脚本...');
+  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    console.log('   ℹ️ 诊断函数已启用');
   }
 
-  lines.push('};');
-  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
-  return lines.join('\n');
-}
+  const manifestStr = BuildGenerators.generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG });
+  const prefixCode = BuildGenerators.generatePrefixIndexCode(generatePrefixIndex());
+  const diagnoseCode = BuildGenerators.generateDiagnoseFunction(BUILD_CONFIG);
 
-function generateDiagnoseFunction(BUILD_CONFIG) {
-  if (!BUILD_CONFIG.ENABLE_DIAGNOSE) return '';
-  return `\n// ==========================================\n// 诊断函数 - 在 QX 控制台运行 diagnose()\n// ==========================================\nfunction diagnose(urlToTest){const testUrls=urlToTest?[urlToTest]:["https://yz1018.6vh3qyu9x.com/v2/api/basic/init","https://www.v2ex.com/t/1201518","https://api.gotokeep.com/nuocha/plans"];console.log("\\nUnifiedVIP 诊断工具 v${BUILD_CONFIG.VERSION}");for(const url of testUrls){try{const hostname=new URL(url).hostname;console.log("URL:",url,"HOST:",hostname);const result=typeof findByPrefix==='function'?findByPrefix(hostname):null;console.log("prefix:",result||'null')}catch(e){console.log("error:",e.message)}}return {success:true}}`;
-}
+  const fullScript = `${BuildGenerators.generateHeaderMinified({ BUILD_CONFIG, APP_REGISTRY })}
 
-function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR }) {
-  const autoHostSet = new Set();
-  for (const cfg of Object.values(APP_REGISTRY)) {
-    if (!cfg || !cfg.urlPattern || typeof cfg.urlPattern !== 'string') continue;
-    const hostMatches = cfg.urlPattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-    for (const host of hostMatches) {
-      const h = host.toLowerCase();
-      if (h.includes('\\/')) continue;
-      if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) continue;
-      if (h.includes('.*')) continue;
-      if (h.startsWith('www.')) {
-        autoHostSet.add(h);
-        autoHostSet.add(h.slice(4));
-      } else {
-        autoHostSet.add(h);
-      }
+// ==========================================
+// 1. 内置Manifest (P2压缩)
+// ==========================================
+const BUILTIN_MANIFEST = ${manifestStr};
+
+// ==========================================
+// 2. 前缀索引 (构建时生成)
+// ==========================================
+${prefixCode}
+
+// ==========================================
+// 3. 平台检测
+// ==========================================
+${modules.platform}
+
+// ==========================================
+// 4. 日志系统
+// ==========================================
+${modules.logger}
+
+// ==========================================
+// 5. M3存储系统
+// ==========================================
+${modules.storage}
+
+// ==========================================
+// 6. HTTP客户端
+// ==========================================
+${modules.http}
+
+// ==========================================
+// 7. 工具函数
+// ==========================================
+${modules.utils}
+
+// ==========================================
+// 8. 正则缓存池
+// ==========================================
+${modules.regexPool}
+
+// ==========================================
+// 9. 处理器工厂
+// ==========================================
+${modules.processorFactory}
+
+// ==========================================
+// 10. 处理器编译器
+// ==========================================
+${modules.compiler}
+
+// ==========================================
+// 11. Manifest加载器
+// ==========================================
+${modules.manifestLoader}
+
+// ==========================================
+// 12. 配置加载器
+// ==========================================
+${modules.configLoader}
+
+// ==========================================
+// 13. VIP引擎 (包含 Environment 类)
+// ==========================================
+${modules.vipEngine}
+${diagnoseCode ? '\n// ==========================================\n// 14. 诊断函数\n// ==========================================\n' + diagnoseCode : ''}
+
+// ==========================================
+// ${diagnoseCode ? '15' : '14'}. 主入口
+// ==========================================
+async function main(){
+  const rid=Math.random().toString(36).substr(2,6).toUpperCase();
+  try{
+    let u='';
+    if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
+    else if(typeof $response!=='undefined'&&$response)u=$response.url||'';
+
+    if(!u)return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{});
+    Logger.info('Main',rid+'|'+u.split('?')[0].substring(0,60));
+    const ml=new SimpleManifestLoader(rid),mf=await ml.load(),cid=mf.findMatch(u);
+    if(!cid){Logger.info('Main','No match');return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})}
+    const cl=new SimpleConfigLoader(rid),cfg=await cl.load(cid,mf.getConfigVersion(cid));
+    const env=new Environment(META.name);
+    const eng=new VipEngine(env,rid);
+    const res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
+    Logger.info('Main',rid+' done ['+cfg.mode+']');
+    $done(res)
+  }catch(e){
+    Logger.error('Main',rid+' fail:'+e.message);
+    $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})
+  }
+}
+main();
+`;
+
+  // 步骤 5: 写入构建产物
+  console.log('📦 步骤 5: 写入构建产物...');
+
+  const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
+  fs.writeFileSync(outputPath, fullScript);
+  const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
+  console.log(`   ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
+
+  // 验证
+  const scriptContent = fs.readFileSync(outputPath, 'utf8');
+
+  // 验证 tv pattern
+  const tvMatch = scriptContent.match(/"tv":\{"name":"([^"]*)","urlPattern":"([^"]+)"/);
+  if (tvMatch) {
+    console.log(`   🔍 tv: ${tvMatch[1]}`);
+    console.log(`   🔍 pattern: ${tvMatch[2].substring(0, 60)}...`);
+  }
+
+  // 验证诊断函数
+  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    if (scriptContent.includes('function diagnose(')) {
+      console.log(`   ✅ 诊断函数已添加`);
+    } else {
+      console.log(`   ❌ 诊断函数缺失`);
     }
   }
 
-  const manualHosts = [
-    '59.82.99.78','*.ipalfish.com','service.hhdd.com','apis.lifeweek.com.cn','fluxapi.vvebo.vip','res5.haotgame.com',
-    'jsq.mingcalc.cn','theater-api.sylangyue.xyz','api.iappdaily.com','api2.tophub.today','api2.tophub.app','api3.tophub.xyz',
-    'api3.tophub.today','api3.tophub.app','tophub.tophubdata.com','tophub2.tophubdata.com','tophub.idaily.today','tophub2.idaily.today',
-    'tophub.remai.today','tophub.iappdaiy.com','tophub.ipadown.com','service.gpstool.com','mapi.kouyuxingqiu.com','ss.landintheair.com',
-    '*.v2ex.com','apis.folidaymall.com','gateway-api.yizhilive.com','pagead*.googlesyndication.com','api.gotokeep.com','kit.gotokeep.com',
-    '*.gotokeep.*','120.53.74.*','162.14.5.*','42.187.199.*','101.42.124.*','javelin.mandrillvr.com','api.banxueketang.com',
-    'yzy0916.*.com','yz1018.*.com','yz250907.*.com','yz0320.*.com','cfvip.*.com','yr-game-api.feigo.fun','star.jvplay.cn','iotpservice.smartont.net'
-  ];
+  const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
+  fs.writeFileSync(rewritePath, BuildGenerators.generateRewriteConf({
+    BUILD_CONFIG,
+    APP_REGISTRY,
+    getAllConfigs,
+    RULES_DIR
+  }));
+  const rewriteSize = (fs.statSync(rewritePath).size / 1024).toFixed(2);
+  console.log(`   ✅ rewrite.conf (${rewriteSize} KB)`);
 
-  const hostnames = Array.from(new Set([...manualHosts, ...Array.from(autoHostSet)])).sort();
-  let conf = `# Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}\n# 构建时间: ${new Date().toISOString()}\n# APP数量: ${Object.keys(APP_REGISTRY).length}\n\n[rewrite_local]\n\n`;
+  console.log('\n📋 构建完成：');
+  const distFiles = fs.readdirSync(DIST_DIR);
+  distFiles.forEach(file => {
+    const stat = fs.statSync(path.join(DIST_DIR, file));
+    const size = stat.isDirectory() ? '-' : `${(stat.size / 1024).toFixed(2)} KB`;
+    console.log(`   ${stat.isDirectory() ? '📁' : '📄'} ${file.padEnd(40)} ${size}`);
+  });
 
-  let allConfigs = {};
-  try { allConfigs = getAllConfigs(); } catch (e) {
-    for (const [id, cfg] of Object.entries(APP_REGISTRY)) allConfigs[id] = { name: id, ...cfg };
+  const configCount = fs.readdirSync(path.join(DIST_DIR, 'configs')).filter(f => f.endsWith('.json')).length;
+  console.log(`   📦 configs/*.json (${configCount} 个)`);
+
+  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
+    console.log('\n📋 诊断功能说明:');
+    console.log('   1. 在 Quantumult X 中运行脚本');
+    console.log('   2. 打开控制台(设置 → 日志)');
+    console.log('   3. 输入: diagnose()');
+    console.log('   4. 查看详细的匹配过程');
   }
 
-  for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
-    const name = allConfigs[id]?.name || id;
-    conf += `# ${name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
-  }
-
-  const customRejectPath = path.join(RULES_DIR, 'custom-reject.txt');
-  if (fs.existsSync(customRejectPath)) {
-    const customRules = fs.readFileSync(customRejectPath, 'utf8').split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#')).map(s => s.includes(' url ') ? s : `${s} url reject-dict`);
-    if (customRules.length > 0) conf += `# custom reject\n${customRules.join('\n')}\n\n`;
-  }
-
-  conf += `[mitm]\nhostname = ${hostnames.join(', ')}\n`;
-  return conf;
+  console.log('\n🚀 发布:');
+  console.log('   git add . && git commit -m "build: update v22" && git push');
+  console.log('\n📎 订阅: https://joeshu.github.io/UnifiedVIP/rewrite.conf');
 }
 
-module.exports = {
-  generateHeaderMinified,
-  generateManifestOneLine,
-  generatePrefixIndexCode,
-  generateDiagnoseFunction,
-  generateRewriteConf
-};
+// 运行构建
+build();
