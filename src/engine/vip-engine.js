@@ -111,13 +111,18 @@ class VipEngine {
 
     // 支持 {{header}} 模板替换
     const requestHeaders = this.env.getRequestHeaders();
+    const requestHeadersLower = {};
+    for (const [k, v] of Object.entries(requestHeaders || {})) {
+      requestHeadersLower[String(k).toLowerCase()] = v;
+    }
+
     const forwardHeaders = {};
 
     if (config.forwardHeaders && typeof config.forwardHeaders === 'object') {
       for (const [key, value] of Object.entries(config.forwardHeaders)) {
         if (typeof value === 'string' && value.startsWith('{{') && value.endsWith('}}')) {
-          const headerName = value.slice(2, -2).toLowerCase();
-          forwardHeaders[key] = requestHeaders[headerName] || '';
+          const headerName = value.slice(2, -2).trim().toLowerCase();
+          forwardHeaders[key] = requestHeadersLower[headerName] || requestHeaders[headerName] || '';
         } else {
           forwardHeaders[key] = value;
         }
