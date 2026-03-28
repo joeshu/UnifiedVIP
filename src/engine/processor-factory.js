@@ -48,13 +48,27 @@ function createProcessorFactory(requestId) {
 
     deleteFields: (params) => (obj, env) => {
       for (const path of params.paths || []) {
+        if (!path || typeof path !== 'string') continue;
+
         const parts = path.split('.');
-        let current = obj;
-        for (let i = 0; i < parts.length - 1; i++) {
-          current = current && current[parts[i]];
-          if (!current) break;
+        if (parts.length === 0) continue;
+
+        const parentPath = parts.slice(0, -1).join('.');
+        const last = parts[parts.length - 1];
+        const parent = parentPath ? Utils.getPath(obj, parentPath) : obj;
+
+        if (!parent || typeof parent !== 'object') continue;
+
+        const lastMatch = last.match(/^([^\[\]]+)\[(\d+)\]$/);
+        if (lastMatch) {
+          const arrName = lastMatch[1];
+          const idx = parseInt(lastMatch[2], 10);
+          if (Array.isArray(parent[arrName]) && idx >= 0 && idx < parent[arrName].length) {
+            parent[arrName].splice(idx, 1);
+          }
+        } else {
+          delete parent[last];
         }
-        if (current) delete current[parts[parts.length - 1]];
       }
       return obj;
     },
