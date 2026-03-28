@@ -66,6 +66,12 @@ function createProcessorFactory(requestId) {
           if (Array.isArray(parent[arrName]) && idx >= 0 && idx < parent[arrName].length) {
             parent[arrName].splice(idx, 1);
           }
+        } else if (Array.isArray(parent)) {
+          for (const item of parent) {
+            if (item && typeof item === 'object') {
+              delete item[last];
+            }
+          }
         } else {
           delete parent[last];
         }
