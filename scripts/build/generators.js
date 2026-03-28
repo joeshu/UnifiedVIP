@@ -32,25 +32,13 @@ const CONFIG = {
   DEBUG: ${debugFlag},
   VERBOSE_PATTERN_LOG: ${verboseFlag},
 
-  // 日志采样（QX）
-  LOG_SAMPLE_RATE: 0.05,
-  LOG_ALWAYS_TAGS: ['VipEngine'],
-
-  // 命中统计（QX，默认关闭以减少 I/O）
-  ENABLE_MATCH_STATS: false,
   URL_CACHE_KEY: 'url_match_v22_lazy',
   URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
   URL_CACHE_MIGRATED_KEY: 'url_match_v22_lazy_migrated',
   URL_CACHE_LEGACY_KEYS: ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'],
   URL_CACHE_TTL_MS: 60 * 60 * 1000,
   URL_CACHE_PERSIST_INTERVAL_MS: 15 * 1000,
-  URL_CACHE_LIMIT: 50,
-
-  // 命中统计（QX，节流写入）
-  MATCH_STATS_KEY: 'uvip_match_stats_v1',
-  MATCH_STATS_META_KEY: 'uvip_match_stats_v1_meta',
-  MATCH_STATS_FLUSH_INTERVAL_MS: 60 * 1000,
-  MATCH_STATS_FLUSH_EVERY_N: 20
+  URL_CACHE_LIMIT: 50
 };
 
 const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
