@@ -94,7 +94,15 @@ const CONFIG = {
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
   DEBUG: ${debugFlag},
-  VERBOSE_PATTERN_LOG: ${verboseFlag}
+  VERBOSE_PATTERN_LOG: ${verboseFlag},
+
+  // URL 匹配缓存（QX）
+  URL_CACHE_KEY: 'url_match_v22_lazy',
+  URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
+  URL_CACHE_LEGACY_KEYS: ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'],
+  URL_CACHE_TTL_MS: 60 * 60 * 1000,
+  URL_CACHE_PERSIST_INTERVAL_MS: 15 * 1000,
+  URL_CACHE_LIMIT: 50
 };
 
 const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
