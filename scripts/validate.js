@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
+const Ajv = require('ajv');
 const { APP_REGISTRY, getAllConfigs } = require('../src/apps/_index');
 
 const VALID_MODES = new Set(['json', 'regex', 'forward', 'remote', 'game', 'hybrid', 'html']);
+const ajv = new Ajv({ allErrors: true, allowUnionTypes: true });
 
 function isValidRegex(pattern) {
   try {
@@ -12,6 +14,33 @@ function isValidRegex(pattern) {
     return false;
   }
 }
+
+const baseSchema = {
+  type: 'object',
+  required: ['name', 'mode', 'urlPattern'],
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    mode: { type: 'string', enum: [...VALID_MODES] },
+    urlPattern: { type: 'string', minLength: 1 },
+    processor: {},
+    regexReplacements: { type: 'array' },
+    forwardUrl: { type: 'string', minLength: 1 },
+    remoteUrl: { type: 'string', minLength: 1 },
+    gameResources: { type: 'array' },
+    htmlReplacements: { type: 'array' }
+  },
+  additionalProperties: true
+};
+
+const modeRules = {
+  json: cfg => !!cfg.processor,
+  regex: cfg => Array.isArray(cfg.regexReplacements) && cfg.regexReplacements.length > 0,
+  forward: cfg => !!cfg.forwardUrl,
+  remote: cfg => !!cfg.remoteUrl,
+  game: cfg => Array.isArray(cfg.gameResources) && cfg.gameResources.length > 0,
+  html: cfg => Array.isArray(cfg.htmlReplacements) && cfg.htmlReplacements.length > 0,
+  hybrid: cfg => !!cfg.processor || (Array.isArray(cfg.regexReplacements) && cfg.regexReplacements.length > 0)
+};
 
 function validateRegistry(errors) {
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
@@ -42,43 +71,23 @@ function validateConfigByMode(id, cfg, errors) {
     return;
   }
 
-  switch (cfg.mode) {
-    case 'json':
-      if (!cfg.processor) errors.push(`${id}: json模式缺少 processor`);
-      break;
-    case 'regex':
-      if (!Array.isArray(cfg.regexReplacements) || cfg.regexReplacements.length === 0) {
-        errors.push(`${id}: regex模式缺少 regexReplacements`);
-      }
-      break;
-    case 'forward':
-      if (!cfg.forwardUrl) errors.push(`${id}: forward模式缺少 forwardUrl`);
-      break;
-    case 'remote':
-      if (!cfg.remoteUrl) errors.push(`${id}: remote模式缺少 remoteUrl`);
-      break;
-    case 'game':
-      if (!Array.isArray(cfg.gameResources) || cfg.gameResources.length === 0) {
-        errors.push(`${id}: game模式缺少 gameResources`);
-      }
-      break;
-    case 'html':
-      if (!Array.isArray(cfg.htmlReplacements) || cfg.htmlReplacements.length === 0) {
-        errors.push(`${id}: html模式缺少 htmlReplacements`);
-      }
-      break;
-    case 'hybrid':
-      if (!cfg.processor && (!Array.isArray(cfg.regexReplacements) || cfg.regexReplacements.length === 0)) {
-        errors.push(`${id}: hybrid模式至少需要 processor 或 regexReplacements`);
-      }
-      break;
-    default:
-      break;
+  if (!modeRules[cfg.mode](cfg)) {
+    const hints = {
+      json: 'json模式缺少 processor',
+      regex: 'regex模式缺少 regexReplacements',
+      forward: 'forward模式缺少 forwardUrl',
+      remote: 'remote模式缺少 remoteUrl',
+      game: 'game模式缺少 gameResources',
+      html: 'html模式缺少 htmlReplacements',
+      hybrid: 'hybrid模式至少需要 processor 或 regexReplacements'
+    };
+    errors.push(`${id}: ${hints[cfg.mode] || 'mode字段不完整'}`);
   }
 }
 
 function validateConfigs(errors) {
   const allConfigs = getAllConfigs();
+  const validateSchema = ajv.compile(baseSchema);
 
   for (const [id, cfg] of Object.entries(allConfigs)) {
     if (!cfg || typeof cfg !== 'object') {
@@ -86,7 +95,13 @@ function validateConfigs(errors) {
       continue;
     }
 
-    if (!cfg.name) errors.push(`${id}: 缺少 name`);
+    if (!validateSchema(cfg)) {
+      const schemaErrors = (validateSchema.errors || [])
+        .slice(0, 5)
+        .map(e => `${e.instancePath || '/'} ${e.message}`)
+        .join('; ');
+      errors.push(`${id}: Schema校验失败 -> ${schemaErrors}`);
+    }
 
     if (!cfg.urlPattern || typeof cfg.urlPattern !== 'string') {
       errors.push(`${id}: 缺少 urlPattern`);
