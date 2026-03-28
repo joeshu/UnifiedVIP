@@ -2,9 +2,20 @@
 // HTTP 客户端 - 增强版 (与 vip-unlock-configs 一致)
 
 const HTTP = (() => {
+  function normalizeTimeoutMs(value, fallback = 10000) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return n;
+  }
+
+  function toQxSeconds(ms) {
+    return Math.max(1, Math.ceil(ms / 1000));
+  }
+
   return {
     get: (url, timeout = 10000) => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Timeout')), timeout);
+      const safeTimeout = normalizeTimeoutMs(timeout, 10000);
+      const timer = setTimeout(() => reject(new Error('Timeout')), safeTimeout);
 
       const callback = (error, response, body) => {
         clearTimeout(timer);
@@ -24,13 +35,13 @@ const HTTP = (() => {
           $task.fetch({
             url,
             method: 'GET',
-            timeout: Math.ceil(timeout / 1000)
+            timeout: toQxSeconds(safeTimeout)
           }).then(
             res => callback(null, { statusCode: res.statusCode, headers: res.headers }, res.body),
             err => callback(err, null, null)
           );
         } else if (typeof $httpClient !== 'undefined') {
-          $httpClient.get({ url, timeout: timeout / 1000 }, callback);
+          $httpClient.get({ url, timeout: safeTimeout / 1000 }, callback);
         } else {
           clearTimeout(timer);
           reject(new Error('No HTTP client'));
@@ -42,9 +53,10 @@ const HTTP = (() => {
     }),
 
     post: (options, timeout = 10000) => new Promise((resolve, reject) => {
-      const effectiveTimeout = (options && typeof options.timeout === 'number' && options.timeout > 0)
-        ? options.timeout
-        : timeout;
+      const effectiveTimeout = normalizeTimeoutMs(
+        options && options.timeout,
+        normalizeTimeoutMs(timeout, 10000)
+      );
 
       const timer = setTimeout(() => reject(new Error('Timeout')), effectiveTimeout);
 
@@ -68,7 +80,7 @@ const HTTP = (() => {
             method: 'POST',
             headers: options.headers || {},
             body: options.body || '',
-            timeout: Math.ceil(effectiveTimeout / 1000)
+            timeout: toQxSeconds(effectiveTimeout)
           }).then(
             res => callback(null, { statusCode: res.statusCode, headers: res.headers }, res.body),
             err => callback(err, null, null)
