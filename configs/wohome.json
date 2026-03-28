@@ -1,5 +1,5 @@
 {
-  "urlPattern": "^https:\/\/iotpservice\.smartont\.net\/wohome\/dispatcher",
+  "urlPattern": "^https://iotpservice[.]smartont[.]net/wohome/dispatcher",
   "id": "wohome",
   "name": "联通智家",
   "mode": "json",
