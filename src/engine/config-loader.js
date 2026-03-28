@@ -4,11 +4,20 @@
 class SimpleConfigLoader {
   constructor(requestId) {
     this._requestId = requestId;
+    this._versionTag = (typeof BUILTIN_MANIFEST !== 'undefined' && BUILTIN_MANIFEST && BUILTIN_MANIFEST.version)
+      ? String(BUILTIN_MANIFEST.version)
+      : 'v1';
+  }
+
+  _versionedId(configId) {
+    return `${configId}@${this._versionTag}`;
   }
 
   async load(configId, remoteVersion) {
+    const versionedId = this._versionedId(configId);
+
     // 检查缓存
-    const cached = Storage.readConfig(configId);
+    const cached = Storage.readConfig(versionedId);
 
     if (cached) {
       try {
@@ -35,7 +44,7 @@ class SimpleConfigLoader {
       const fresh = Utils.safeJsonParse(res.body);
 
       // 写入缓存 - 使用兼容格式
-      Storage.writeConfig(configId, {
+      Storage.writeConfig(versionedId, {
         v: remoteVersion,
         t: Date.now(),
         d: fresh
