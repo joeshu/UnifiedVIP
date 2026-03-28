@@ -14,11 +14,11 @@ const BuildGenerators = require('./build/generators');
 const BUILD_CONFIG = {
   // 手动开关：true=开启，false=关闭
   ENABLE_DIAGNOSE: false,
-  DEBUG_MODE: true,
+  DEBUG_MODE: false,
 
   // 可选手动版本后缀，例如 'lazy' / 'beta'
   // 留空 '' 则使用 package.json.version 原始版本
-  VERSION_TAG: '0328',
+  VERSION_TAG: '',
 
   // 版本号（单一来源：package.json，可拼接手动后缀）
   get VERSION() {
@@ -200,16 +200,27 @@ async function main(){
     let u='';
     if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
     else if(typeof $response!=='undefined'&&$response)u=$response.url||'';
-
     if(!u)return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{});
-    Logger.info('Main',rid+'|'+u.split('?')[0].substring(0,60));
-    const ml=new SimpleManifestLoader(rid),mf=await ml.load(),cid=mf.findMatch(u);
-    if(!cid){Logger.info('Main','No match');return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})}
-    const cl=new SimpleConfigLoader(rid),cfg=await cl.load(cid,mf.getConfigVersion(cid));
+
+    Logger.debug('Main',rid+'|'+u.split('?')[0].substring(0,60));
+
+    const g = (typeof globalThis !== 'undefined') ? globalThis : {};
+    const ml = g.__UVIP_ML || (g.__UVIP_ML = new SimpleManifestLoader('GLOBAL'));
+    const mf = g.__UVIP_MF || (g.__UVIP_MF = await ml.load());
+    const cid = mf.findMatch(u);
+
+    if(!cid){
+      Logger.debug('Main','No match');
+      return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})
+    }
+
+    const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
+    const cfg = await cl.load(cid,mf.getConfigVersion(cid));
     const env=new Environment(META.name);
     const eng=new VipEngine(env,rid);
     const res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
-    Logger.info('Main',rid+' done ['+cfg.mode+']');
+
+    Logger.debug('Main',rid+' done ['+cfg.mode+']');
     $done(res)
   }catch(e){
     Logger.error('Main',rid+' fail:'+e.message);
