@@ -33,10 +33,11 @@ const CONFIG = {
   VERBOSE_PATTERN_LOG: ${verboseFlag},
 
   // 日志采样（QX）
-  LOG_SAMPLE_RATE: 0.2,
-  LOG_ALWAYS_TAGS: ['Main', 'VipEngine', 'Forward', 'Remote', 'ManifestLoader'],
+  LOG_SAMPLE_RATE: 0.05,
+  LOG_ALWAYS_TAGS: ['VipEngine'],
 
-  // URL 匹配缓存（QX）
+  // 命中统计（QX，默认关闭以减少 I/O）
+  ENABLE_MATCH_STATS: false,
   URL_CACHE_KEY: 'url_match_v22_lazy',
   URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
   URL_CACHE_MIGRATED_KEY: 'url_match_v22_lazy_migrated',
