@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const pkg = require('../package.json');
 
 // ==========================================
 // 构建配置开关
@@ -16,8 +17,8 @@ const BUILD_CONFIG = {
   // 是否开启 DEBUG 模式（生产环境默认关闭，可通过 DEBUG=1 开启）
   DEBUG_MODE: process.env.DEBUG === '1',
 
-  // 版本号
-  VERSION: '22.0.0-Lazy'
+  // 版本号（单一来源：package.json；可选 BUILD_TAG 附加后缀）
+  VERSION: process.env.BUILD_TAG ? `${pkg.version}-${process.env.BUILD_TAG}` : pkg.version
 };
 
 const SRC_DIR = path.join(__dirname, '../src');
@@ -102,7 +103,13 @@ const CONFIG = {
   URL_CACHE_LEGACY_KEYS: ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'],
   URL_CACHE_TTL_MS: 60 * 60 * 1000,
   URL_CACHE_PERSIST_INTERVAL_MS: 15 * 1000,
-  URL_CACHE_LIMIT: 50
+  URL_CACHE_LIMIT: 50,
+
+  // 命中统计（QX，节流写入）
+  MATCH_STATS_KEY: 'uvip_match_stats_v1',
+  MATCH_STATS_META_KEY: 'uvip_match_stats_v1_meta',
+  MATCH_STATS_FLUSH_INTERVAL_MS: 60 * 1000,
+  MATCH_STATS_FLUSH_EVERY_N: 20
 };
 
 const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
