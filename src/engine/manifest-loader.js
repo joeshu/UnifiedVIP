@@ -2,6 +2,7 @@ class SimpleManifestLoader {
   constructor(requestId) {
     this._requestId = requestId;
     this._urlCache = typeof Platform !== 'undefined' && Platform.isQX ? {} : null;
+    this._memoizedMatches = new Map(); // QX轻量化：缓存本轮匹配结果
 
     const runtimeCfg = (typeof CONFIG !== 'undefined' && CONFIG) ? CONFIG : {};
 
