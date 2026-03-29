@@ -25,7 +25,8 @@ class SimpleConfigLoader {
         const { v, t, d } = JSON.parse(cached);
         if (v === remoteVersion && (Date.now() - t) < CONFIG.CONFIG_CACHE_TTL) {
           Logger.info('ConfigLoader', `${configId} cache hit`);
-          return this._prepareConfig(d);
+          // 热缓存路径：直接返回预处理后的对象，避免二次解析
+          return d;
         }
       } catch (e) {}
     }
@@ -50,6 +51,7 @@ class SimpleConfigLoader {
         d: fresh
       });
 
+      // 预处理配置
       return this._prepareConfig(fresh);
 
     } catch (e) {
@@ -59,7 +61,7 @@ class SimpleConfigLoader {
       if (cached) {
         Logger.warn('ConfigLoader', `${configId} using stale cache`);
         const { d } = JSON.parse(cached);
-        return this._prepareConfig(d);
+        return d; // 热缓存路径
       }
       throw e;
     }
