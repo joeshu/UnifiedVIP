@@ -5,12 +5,12 @@
   "mode": "html",
   "htmlReplacements": [
     {
-      "pattern": "<script[^>]*src=\"https:\\/\\/cdn\\.wwads\\.cn\\/js\\/makemoney\\.js\"[^>]*><\\/script>",
+      "pattern": "<script[^>]*cdn\\.wwads\\.cn\\/js\\/makemoney\\.js[^>]*><\\/script>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<script[^>]*src=\"https:\\/\\/pagead2\\.googlesyndication\\.com\\/pagead\\/js\\/adsbygoogle\\.js[^\"]*\"[^>]*><\\/script>",
+      "pattern": "<script[^>]*pagead2\\.googlesyndication\\.com\\/pagead\\/js\\/adsbygoogle\\.js[^>]*><\\/script>",
       "replacement": "",
       "flags": "gi"
     },
@@ -26,7 +26,7 @@
     },
     {
       "pattern": "</body>",
-      "replacement": "<script>(function(){var ads=['.sidebar_units','.sidebar_compliance','.wwads','.adsbygoogle','#pro-campaign-container'];ads.forEach(function(s){document.querySelectorAll(s).forEach(function(el){el.remove();});});document.querySelectorAll('script[src*=\"cdn.wwads.cn/js/makemoney.js\"],script[src*=\"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js\"]').forEach(function(el){el.remove();});})();</script></body>",
+      "replacement": "<script>(function(){var ads=['.sidebar_units','.sidebar_compliance','.wwads','.adsbygoogle','#pro-campaign-container'];ads.forEach(function(s){document.querySelectorAll(s).forEach(function(el){el.remove();});});document.querySelectorAll('script[src*=\"cdn.wwads.cn/js/makemoney.js\"],script[src*=\"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js\"]').forEach(function(el){el.remove();});var meta=document.querySelector('meta[name=\"wwads-cn-verify\"]');if(meta)meta.remove();})();</script></body>",
       "flags": "i"
     }
   ]
