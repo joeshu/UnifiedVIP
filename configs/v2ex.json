@@ -1,33 +1,43 @@
 {
-  "urlPattern": "^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).+$",
+  "urlPattern": "^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).*$",
   "id": "v2ex",
   "name": "V2EX去广告",
   "mode": "html",
   "htmlReplacements": [
     {
-      "pattern": "<script[^>]*cdn\\.wwads\\.cn\\/js\\/makemoney\\.js[^>]*><\\/script>",
+      "pattern": "<meta[^>]*name=[\"']wwads-cn-verify[\"'][^>]*>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<script[^>]*pagead2\\.googlesyndication\\.com\\/pagead\\/js\\/adsbygoogle\\.js[^>]*><\\/script>",
+      "pattern": "<script[^>]*src=[\"'][^\"']*cdn\\.wwads\\.cn[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<div[^>]*id=\"pro-campaign-container\"[^>]*>[\\s\\S]*?<\\/script>",
+      "pattern": "<script[^>]*src=[\"'][^\"']*pagead2\\.googlesyndication\\.com[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<div[^>]*class=\"[^\"]*wwads[^\"]*\"[^>]*>[\\s\\S]*?<\\/div>",
+      "pattern": "<div[^>]*id=[\"']pro-campaign-container[\"'][^>]*>[\\s\\S]*?<\\/script>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "<div[^>]*class=[\"'][^\"']*wwads[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/div>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "<script[^>]*src=[\"'][^\"']*google-analytics\\.com[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     },
     {
       "pattern": "</body>",
-      "replacement": "<script>(function(){var ads=['.sidebar_units','.sidebar_compliance','.wwads','.adsbygoogle','#pro-campaign-container'];ads.forEach(function(s){document.querySelectorAll(s).forEach(function(el){el.remove();});});document.querySelectorAll('script[src*=\"cdn.wwads.cn/js/makemoney.js\"],script[src*=\"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js\"]').forEach(function(el){el.remove();});var meta=document.querySelector('meta[name=\"wwads-cn-verify\"]');if(meta)meta.remove();})();</script></body>",
-      "flags": "i"
+      "replacement": "<script>(function(){var ads=['.sidebar_units','.sidebar_compliance','.wwads','.adsbygoogle','#pro-campaign-container'];ads.forEach(function(s){document.querySelectorAll(s).forEach(function(el){el.remove();});});document.querySelectorAll('script[src*=\"cdn.wwads.cn\"],script[src*=\"googlesyndication.com\"],script[src*=\"google-analytics.com\"]').forEach(function(el){el.remove();});var meta=document.querySelector('meta[name=\"wwads-cn-verify\"]');if(meta)meta.remove();})();</script></body>",
+      "flags": "gi"
     }
   ]
 }
