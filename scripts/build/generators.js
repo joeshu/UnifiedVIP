@@ -129,7 +129,7 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     'jsq.mingcalc.cn','theater-api.sylangyue.xyz','api.iappdaily.com','api2.tophub.today','api2.tophub.app','api3.tophub.xyz',
     'api3.tophub.today','api3.tophub.app','tophub.tophubdata.com','tophub2.tophubdata.com','tophub.idaily.today','tophub2.idaily.today',
     'tophub.remai.today','tophub.iappdaiy.com','tophub.ipadown.com','service.gpstool.com','mapi.kouyuxingqiu.com','ss.landintheair.com',
-    '*.v2ex.com','apis.folidaymall.com','gateway-api.yizhilive.com','pagead*.googlesyndication.com','api.gotokeep.com','kit.gotokeep.com',
+    '*.v2ex.com','v2ex.com','apis.folidaymall.com','gateway-api.yizhilive.com','pagead*.googlesyndication.com','api.gotokeep.com','kit.gotokeep.com',
     '*.gotokeep.*','120.53.74.*','162.14.5.*','42.187.199.*','101.42.124.*','javelin.mandrillvr.com','api.banxueketang.com',
     'yzy0916.*.com','yz1018.*.com','yz250907.*.com','yz0320.*.com','cfvip.*.com','yr-game-api.feigo.fun','star.jvplay.cn','iotpservice.smartont.net'
   ];
