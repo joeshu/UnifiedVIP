@@ -3,7 +3,7 @@
  * 用法：作为 V2EX 的 script-response-body 脚本执行，输出响应体分析
  
 [rewrite_local]
-^https?://www\.v2ex\.com/ url script-response-body https://your-domain/unifiedvip_v2ex_diag.js
+^https?://www\.v2ex\.com/ url script-response-body https://raw.githubusercontent.com/joeshu/UnifiedVIP/refs/heads/main/1.js
 [mitm]
 hostname = *.v2ex.com
 */
