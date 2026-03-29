@@ -13,7 +13,7 @@ const BuildGenerators = require('./build/generators');
 // ==========================================
 const BUILD_CONFIG = {
   // 手动开关：true=开启，false=关闭
-  ENABLE_DIAGNOSE: false,
+  ENABLE_DIAGNOSE: true,
   DEBUG_MODE: true,
 
   // 可选手动版本后缀，例如 'lazy' / 'beta'
