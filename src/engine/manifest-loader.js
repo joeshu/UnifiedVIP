@@ -3,6 +3,7 @@ class SimpleManifestLoader {
     this._requestId = requestId;
     this._urlCache = typeof Platform !== 'undefined' && Platform.isQX ? {} : null;
     this._memoizedMatches = new Map(); // QX轻量化：缓存本轮匹配结果
+    this._maxMemoizedMatchesSize = 300;
 
     const runtimeCfg = (typeof CONFIG !== 'undefined' && CONFIG) ? CONFIG : {};
 
@@ -33,6 +34,8 @@ class SimpleManifestLoader {
     this._statsPending = 0;
 
     this._regexCache = new Map();
+    this._hostnameCache = new Map();
+    this._maxHostnameCacheSize = 200;
     this._prefixIndex = typeof PREFIX_INDEX !== 'undefined' ? PREFIX_INDEX : {};
     this._lazyConfigs = typeof BUILTIN_MANIFEST !== 'undefined' ? BUILTIN_MANIFEST.configs : {};
     this._persistMeta = this._loadPersistMeta();
@@ -266,6 +269,35 @@ class SimpleManifestLoader {
     }
   }
 
+  _extractHostnameFromCacheKey(cacheKey) {
+    if (!cacheKey || typeof cacheKey !== 'string') return '';
+    const first = cacheKey.indexOf('|');
+    if (first < 0) return '';
+    const second = cacheKey.indexOf('|', first + 1);
+    if (second < 0) return '';
+    return cacheKey.slice(first + 1, second);
+  }
+
+  _getHostname(url) {
+    let hostname = this._hostnameCache.get(url);
+    if (hostname === undefined) {
+      try {
+        hostname = new URL(url).hostname;
+      } catch (e) {
+        // 如果URL解析失败，返回空字符串
+        hostname = '';
+      }
+      this._hostnameCache.set(url, hostname);
+      
+      // 限制缓存大小
+      if (this._hostnameCache.size > this._maxHostnameCacheSize) {
+        const firstKey = this._hostnameCache.keys().next().value;
+        this._hostnameCache.delete(firstKey);
+      }
+    }
+    return hostname;
+  }
+
   _findByPrefix(hostname) {
     if (typeof findByPrefix === 'function') return findByPrefix(hostname);
 
@@ -331,21 +363,33 @@ class SimpleManifestLoader {
       findMatch: (url) => {
         const cacheKey = self._buildUrlCacheKey(url);
 
+        // 本次运行内的热路径缓存（避免同URL重复匹配）
+        if (self._memoizedMatches.has(cacheKey)) {
+          return self._memoizedMatches.get(cacheKey);
+        }
+
         if (self._urlCache) {
           const cached = self._urlCache[cacheKey];
           if (cached && (Date.now() - cached.ts) < self._cacheTtlMs) {
             Logger.debug('ManifestLoader', `Cache hit: ${cached.id}`);
             self._incrementStat('cacheHit');
             self._touchUrlCache(cacheKey, cached.id);
+            self._memoizedMatches.set(cacheKey, cached.id);
+            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
+              const firstKey = self._memoizedMatches.keys().next().value;
+              self._memoizedMatches.delete(firstKey);
+            }
             return cached.id;
           }
         }
         self._incrementStat('cacheMiss');
 
         let candidates = [];
+        let hostname = self._extractHostnameFromCacheKey(cacheKey);
 
         try {
-          const hostname = new URL(url).hostname;
+          if (!hostname) hostname = self._getHostname(url);
+          if (!hostname) throw new Error('Invalid URL');
           const matchInfo = self._findByPrefix(hostname);
 
           if (matchInfo) {
@@ -394,12 +438,22 @@ class SimpleManifestLoader {
           if (regex && regex.test(url)) {
             Logger.debug('ManifestLoader', `Matched: ${id} (${self._regexCache.size}/${candidates.length})`);
             if (self._urlCache) self._touchUrlCache(cacheKey, id);
+            self._memoizedMatches.set(cacheKey, id);
+            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
+              const firstKey = self._memoizedMatches.keys().next().value;
+              self._memoizedMatches.delete(firstKey);
+            }
             return id;
           }
         }
 
         self._incrementStat('missRegex');
         Logger.warn('ManifestLoader', `MISS_REGEX: No match for ${url.substring(0, 40)}...`);
+        self._memoizedMatches.set(cacheKey, null);
+        if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
+          const firstKey = self._memoizedMatches.keys().next().value;
+          self._memoizedMatches.delete(firstKey);
+        }
         return null;
       },
 
