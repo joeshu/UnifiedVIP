@@ -7,10 +7,10 @@
 class Environment {
   constructor(name) {
     this.name = name;
-    this.isQX = typeof Platform !== 'undefined' ? Platform.isQX : false;
-    this.isSurge = typeof Platform !== 'undefined' ? Platform.isSurge : false;
-    this.isLoon = typeof Platform !== 'undefined' ? Platform.isLoon : false;
-    this.isStash = typeof Platform !== 'undefined' ? Platform.isStash : false;
+    this.isQX = true;
+    this.isSurge = false;
+    this.isLoon = false;
+    this.isStash = false;
 
     this.response = (typeof $response !== 'undefined') ? $response : {};
     this.request = (typeof $request !== 'undefined') ? $request : {};
@@ -22,7 +22,7 @@ class Environment {
 
   getUrl() {
     let url = (this.response && this.response.url) || (this.request && this.request.url) || '';
-    if (this.isQX && typeof $request === 'string') {
+    if (typeof $request === 'string') {
       url = $request;
     }
     return url.toString();

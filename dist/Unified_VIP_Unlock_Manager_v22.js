@@ -1,12 +1,12 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-30T11:43:34.313Z
+ * 构建时间: 2026-03-30T12:42:03.343Z
  * APP数量: 21
  * ==========================================
  *
  * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
- * 诊断功能: 在 QX 控制台运行 diagnose() 查看详细匹配信息
+
  */
 
 'use strict';
@@ -22,8 +22,8 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: true,
-  VERBOSE_PATTERN_LOG: true,
+  DEBUG: false,
+  VERBOSE_PATTERN_LOG: false,
 
   URL_CACHE_KEY: 'url_match_v22_lazy',
   URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
@@ -157,20 +157,16 @@ function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.e
 // 3. 平台检测
 // ==========================================
 // src/core/platform.js
-// 平台检测
+// 平台检测（QX Only）
 
 const Platform = {
-  isQX: typeof $task !== 'undefined',
-  isLoon: typeof $loon !== 'undefined',
-  isSurge: typeof $httpClient !== 'undefined' && typeof $loon === 'undefined',
-  isStash: typeof $stash !== 'undefined',
+  isQX: true,
+  isLoon: false,
+  isSurge: false,
+  isStash: false,
 
   getName() {
-    if (this.isQX) return 'QX';
-    if (this.isLoon) return 'Loon';
-    if (this.isSurge) return 'Surge';
-    if (this.isStash) return 'Stash';
-    return 'Unknown';
+    return 'QX';
   }
 };
 
@@ -178,71 +174,14 @@ const Platform = {
 // 4. 日志系统
 // ==========================================
 // src/core/logger.js
-// 日志系统 - 仅基于 CONFIG.DEBUG + 采样
+// 日志系统 - QX 性能版（全部静默）
 
-const Logger = (() => {
-  const now = () => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-  };
-
-  const metaName = typeof META !== 'undefined' ? META.name : 'UnifiedVIP';
-
-  const normalizeTagSet = () => {
-    const tags = (typeof CONFIG !== 'undefined' && Array.isArray(CONFIG.LOG_ALWAYS_TAGS))
-      ? CONFIG.LOG_ALWAYS_TAGS
-      : [];
-    return new Set(tags.map(t => String(t)));
-  };
-
-  const alwaysTags = normalizeTagSet();
-
-  const getSampleRate = () => {
-    const v = typeof CONFIG !== 'undefined' ? Number(CONFIG.LOG_SAMPLE_RATE) : NaN;
-    if (!Number.isFinite(v)) return 1;
-    if (v <= 0) return 0;
-    if (v >= 1) return 1;
-    return v;
-  };
-
-  const isDebugEnabled = () => {
-    return typeof CONFIG !== 'undefined' && CONFIG.DEBUG === true;
-  };
-
-  const canLogBySampling = (tag, level) => {
-    if (level === 'ERROR') return true;
-    if (level === 'WARN') return true;
-    if (alwaysTags.has(String(tag))) return true;
-
-    const rate = getSampleRate();
-    if (rate >= 1) return true;
-    if (rate <= 0) return false;
-    return Math.random() < rate;
-  };
-
-  const print = (level, tag, msg) => {
-    if (!canLogBySampling(tag, level)) return;
-    console.log(`[${metaName}][${now()}][${level}][${tag}] ${msg}`);
-  };
-
-  return {
-    info: (tag, msg) => {
-      if (!isDebugEnabled()) return;
-      print('INFO', tag, msg);
-    },
-    error: (tag, msg) => print('ERROR', tag, msg),
-    debug: (tag, msg) => {
-      if (!isDebugEnabled()) return;
-      const verbose = typeof CONFIG !== 'undefined' && CONFIG.VERBOSE_PATTERN_LOG;
-      if (!verbose) return;
-      print('DEBUG', tag, msg);
-    },
-    warn: (tag, msg) => {
-      if (!isDebugEnabled()) return;
-      print('WARN', tag, msg);
-    }
-  };
-})();
+const Logger = {
+  info: () => {},
+  error: () => {},
+  debug: () => {},
+  warn: () => {}
+};
 
 // ==========================================
 // 5. M3存储系统
@@ -323,7 +262,7 @@ const Storage = (() => {
 // 6. HTTP客户端
 // ==========================================
 // src/core/http.js
-// HTTP 客户端 - 增强版 (与 vip-unlock-configs 一致)
+// HTTP 客户端 - QX Only
 
 const HTTP = (() => {
   function normalizeTimeoutMs(value, fallback = 10000) {
@@ -341,39 +280,24 @@ const HTTP = (() => {
       const safeTimeout = normalizeTimeoutMs(timeout, 10000);
       const timer = setTimeout(() => reject(new Error('Timeout')), safeTimeout);
 
-      const callback = (error, response, body) => {
-        clearTimeout(timer);
-        if (error) {
-          reject(new Error(String(error)));
-        } else {
-          resolve({
-            body: body || '',
-            statusCode: typeof response === 'object' ? (response.statusCode || response.status || 200) : 200,
-            headers: typeof response === 'object' ? (response.headers || {}) : {}
-          });
-        }
-      };
-
-      try {
-        if (typeof Platform !== 'undefined' && Platform.isQX) {
-          $task.fetch({
-            url,
-            method: 'GET',
-            timeout: toQxSeconds(safeTimeout)
-          }).then(
-            res => callback(null, { statusCode: res.statusCode, headers: res.headers }, res.body),
-            err => callback(err, null, null)
-          );
-        } else if (typeof $httpClient !== 'undefined') {
-          $httpClient.get({ url, timeout: safeTimeout / 1000 }, callback);
-        } else {
+      $task.fetch({
+        url,
+        method: 'GET',
+        timeout: toQxSeconds(safeTimeout)
+      }).then(
+        res => {
           clearTimeout(timer);
-          reject(new Error('No HTTP client'));
+          resolve({
+            body: res.body || '',
+            statusCode: res.statusCode || 200,
+            headers: res.headers || {}
+          });
+        },
+        err => {
+          clearTimeout(timer);
+          reject(new Error(String(err)));
         }
-      } catch (e) {
-        clearTimeout(timer);
-        reject(e);
-      }
+      );
     }),
 
     post: (options, timeout = 10000) => new Promise((resolve, reject) => {
@@ -384,46 +308,26 @@ const HTTP = (() => {
 
       const timer = setTimeout(() => reject(new Error('Timeout')), effectiveTimeout);
 
-      const callback = (error, response, body) => {
-        clearTimeout(timer);
-        if (error) {
-          reject(new Error(String(error)));
-        } else {
-          resolve({
-            body: body || '',
-            statusCode: typeof response === 'object' ? (response.statusCode || response.status || 200) : 200,
-            headers: typeof response === 'object' ? (response.headers || {}) : {}
-          });
-        }
-      };
-
-      try {
-        if (typeof Platform !== 'undefined' && Platform.isQX) {
-          $task.fetch({
-            url: options.url,
-            method: 'POST',
-            headers: options.headers || {},
-            body: options.body || '',
-            timeout: toQxSeconds(effectiveTimeout)
-          }).then(
-            res => callback(null, { statusCode: res.statusCode, headers: res.headers }, res.body),
-            err => callback(err, null, null)
-          );
-        } else if (typeof $httpClient !== 'undefined') {
-          $httpClient.post({
-            url: options.url,
-            headers: options.headers || {},
-            body: options.body || '',
-            timeout: effectiveTimeout / 1000
-          }, callback);
-        } else {
+      $task.fetch({
+        url: options.url,
+        method: 'POST',
+        headers: options.headers || {},
+        body: options.body || '',
+        timeout: toQxSeconds(effectiveTimeout)
+      }).then(
+        res => {
           clearTimeout(timer);
-          reject(new Error('No HTTP client'));
+          resolve({
+            body: res.body || '',
+            statusCode: res.statusCode || 200,
+            headers: res.headers || {}
+          });
+        },
+        err => {
+          clearTimeout(timer);
+          reject(new Error(String(err)));
         }
-      } catch (e) {
-        clearTimeout(timer);
-        reject(e);
-      }
+      );
     })
   };
 })();
@@ -852,469 +756,109 @@ function createCompiler(factory) {
 // ==========================================
 // 11. Manifest加载器
 // ==========================================
+// src/engine/manifest-loader.js
+// Manifest 加载器 - QX 纯净版（去除统计/迁移/多分支）
+
 class SimpleManifestLoader {
   constructor(requestId) {
     this._requestId = requestId;
-    this._urlCache = typeof Platform !== 'undefined' && Platform.isQX ? {} : null;
-    this._memoizedMatches = new Map(); // QX轻量化：缓存本轮匹配结果
-    this._maxMemoizedMatchesSize = 300;
+    this._versionTag = (typeof BUILTIN_MANIFEST !== 'undefined' && BUILTIN_MANIFEST && BUILTIN_MANIFEST.version)
+      ? String(BUILTIN_MANIFEST.version)
+      : 'v1';
 
-    const runtimeCfg = (typeof CONFIG !== 'undefined' && CONFIG) ? CONFIG : {};
-
-    this._urlCacheKey = runtimeCfg.URL_CACHE_KEY || 'url_match_v22_lazy';
-    this._urlMetaKey = runtimeCfg.URL_CACHE_META_KEY || `${this._urlCacheKey}_meta`;
-    this._urlCacheMigratedKey = runtimeCfg.URL_CACHE_MIGRATED_KEY || `${this._urlCacheKey}_migrated`;
-
-    const legacyKeys = Array.isArray(runtimeCfg.URL_CACHE_LEGACY_KEYS)
-      ? runtimeCfg.URL_CACHE_LEGACY_KEYS
-      : ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'];
-
-    this._legacyUrlCacheKeys = [this._urlCacheKey, ...legacyKeys]
-      .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
-    this._legacyMetaKeys = [this._urlMetaKey, ...this._legacyUrlCacheKeys.map(k => `${k}_meta`)]
-      .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
-
-    this._cacheTtlMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_TTL_MS, 3600000);
-    this._persistIntervalMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_PERSIST_INTERVAL_MS, 15000);
-    this._persistLimit = Math.max(10, Math.min(200, Math.floor(this._readPositiveNumber(runtimeCfg.URL_CACHE_LIMIT, 50))));
-
-    this._statsEnabled = runtimeCfg.ENABLE_MATCH_STATS === true;
-    this._statsKey = runtimeCfg.MATCH_STATS_KEY || 'uvip_match_stats_v1';
-    this._statsMetaKey = runtimeCfg.MATCH_STATS_META_KEY || `${this._statsKey}_meta`;
-    this._statsFlushIntervalMs = this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_INTERVAL_MS, 60000);
-    this._statsFlushEveryN = Math.max(10, Math.floor(this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_EVERY_N, 20)));
-    this._statsMeta = this._statsEnabled ? this._loadStatsMeta() : { lastFlushAt: 0 };
-    this._stats = this._statsEnabled ? this._loadStats() : null;
-    this._statsPending = 0;
-
+    this._cacheKey = `uvip_manifest_${this._versionTag}`;
+    this._manifest = null;
+    this._lazyConfigs = null;
     this._regexCache = new Map();
-    this._hostnameCache = new Map();
-    this._maxHostnameCacheSize = 200;
-    this._prefixIndex = typeof PREFIX_INDEX !== 'undefined' ? PREFIX_INDEX : {};
-    this._lazyConfigs = typeof BUILTIN_MANIFEST !== 'undefined' ? BUILTIN_MANIFEST.configs : {};
-    this._persistMeta = this._loadPersistMeta();
-    this._hostTokenIndex = null;
+    this._maxMemoizedMatchesSize = 128;
+    this._memoizedMatches = new Map();
 
-    if (this._urlCache && typeof $prefs !== 'undefined') {
-      const migrated = this._isLegacyMigrated();
-      const lookupKeys = migrated ? [this._urlCacheKey] : this._legacyUrlCacheKeys;
-      const { raw, keyUsed } = this._readFirstAvailable(lookupKeys);
-
-      if (raw) {
-        this._restoreUrlCache(raw);
-      }
-
-      if (!migrated) {
-        if (raw && keyUsed && keyUsed !== this._urlCacheKey) {
-          this._saveUrlCache(true);
-        }
-        this._cleanupLegacyKeys();
-        this._markLegacyMigrated();
-      }
-    }
-  }
-
-  _readPositiveNumber(value, fallback) {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
-  }
-
-  _readFirstAvailable(keys) {
-    if (typeof $prefs === 'undefined') return { raw: null, keyUsed: null };
-
-    for (const key of keys) {
+    // QX: 直接读取缓存
+    const raw = (typeof $prefs !== 'undefined') ? $prefs.valueForKey(this._cacheKey) : null;
+    if (raw) {
       try {
-        const raw = $prefs.valueForKey(key);
-        if (raw) return { raw, keyUsed: key };
+        const data = JSON.parse(raw);
+        if (data && data.data) {
+          this._manifest = data;
+          this._lazyConfigs = data.data || {};
+        }
       } catch (e) {}
     }
-
-    return { raw: null, keyUsed: null };
-  }
-
-  _isLegacyMigrated() {
-    if (typeof $prefs === 'undefined') return true;
-    try {
-      return $prefs.valueForKey(this._urlCacheMigratedKey) === '1';
-    } catch (e) {
-      return false;
-    }
-  }
-
-  _markLegacyMigrated() {
-    if (typeof $prefs === 'undefined') return;
-    try {
-      $prefs.setValueForKey(this._urlCacheMigratedKey, '1');
-    } catch (e) {}
-  }
-
-  _cleanupLegacyKeys() {
-    if (typeof $prefs === 'undefined') return;
-
-    const keysToDelete = [
-      ...this._legacyUrlCacheKeys.filter(k => k !== this._urlCacheKey),
-      ...this._legacyMetaKeys.filter(k => k !== this._urlMetaKey)
-    ];
-
-    for (const key of keysToDelete) {
-      try { $prefs.removeValueForKey(key); } catch (e) {}
-    }
-  }
-
-  _restoreUrlCache(raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return;
-
-      const now = Date.now();
-      for (const [k, v] of Object.entries(parsed)) {
-        if (!v || typeof v !== 'object') continue;
-        if (!v.id || !v.ts) continue;
-        if (now - v.ts < this._cacheTtlMs) {
-          this._urlCache[k] = { id: v.id, ts: v.ts };
-        }
-      }
-    } catch (e) {}
-  }
-
-  _loadPersistMeta() {
-    if (typeof $prefs === 'undefined') return { lastPersistAt: 0 };
-
-    const { raw } = this._readFirstAvailable(this._legacyMetaKeys);
-    if (!raw) return { lastPersistAt: 0 };
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.lastPersistAt === 'number') {
-        return { lastPersistAt: parsed.lastPersistAt };
-      }
-    } catch (e) {}
-
-    return { lastPersistAt: 0 };
-  }
-
-  _loadStatsMeta() {
-    if (typeof $prefs === 'undefined') return { lastFlushAt: 0 };
-
-    try {
-      const raw = $prefs.valueForKey(this._statsMetaKey);
-      if (!raw) return { lastFlushAt: 0 };
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.lastFlushAt === 'number') {
-        return { lastFlushAt: parsed.lastFlushAt };
-      }
-    } catch (e) {}
-
-    return { lastFlushAt: 0 };
-  }
-
-  _loadStats() {
-    const defaults = {
-      cacheHit: 0,
-      cacheMiss: 0,
-      exact: 0,
-      suffix: 0,
-      keyword: 0,
-      fallback: 0,
-      tokenNarrow: 0,
-      missPrefix: 0,
-      missRegex: 0,
-      invalidPattern: 0,
-      urlParseFail: 0,
-      updatedAt: Date.now()
-    };
-
-    if (typeof $prefs === 'undefined') return defaults;
-
-    try {
-      const raw = $prefs.valueForKey(this._statsKey);
-      if (!raw) return defaults;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return defaults;
-      return { ...defaults, ...parsed, updatedAt: Date.now() };
-    } catch (e) {
-      return defaults;
-    }
-  }
-
-  _incrementStat(key, delta = 1) {
-    if (!this._statsEnabled) return;
-    if (!this._stats || typeof this._stats !== 'object') return;
-    this._stats[key] = (this._stats[key] || 0) + delta;
-    this._stats.updatedAt = Date.now();
-    this._statsPending += 1;
-    this._flushStats(false);
-  }
-
-  _flushStats(force = false) {
-    if (!this._statsEnabled) return;
-    if (typeof $prefs === 'undefined' || !this._stats) return;
-
-    const now = Date.now();
-    const reachCount = this._statsPending >= this._statsFlushEveryN;
-    const reachTime = (now - (this._statsMeta.lastFlushAt || 0)) >= this._statsFlushIntervalMs;
-
-    if (!force && !reachCount && !reachTime) return;
-
-    try {
-      $prefs.setValueForKey(this._statsKey, JSON.stringify(this._stats));
-      this._statsMeta.lastFlushAt = now;
-      $prefs.setValueForKey(this._statsMetaKey, JSON.stringify(this._statsMeta));
-      this._statsPending = 0;
-    } catch (e) {}
-  }
-
-  _buildHostTokenIndex() {
-    const index = {};
-    const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
-
-    for (const [id, cfg] of Object.entries(this._lazyConfigs || {})) {
-      const pattern = cfg && cfg.urlPattern;
-      if (!pattern || typeof pattern !== 'string') continue;
-
-      const hosts = pattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-      for (const host of hosts) {
-        const tokens = host.toLowerCase().split('.').filter(Boolean);
-        for (const tk of tokens) {
-          if (tk.length < 3 || ignored.has(tk)) continue;
-          if (!index[tk]) index[tk] = new Set();
-          index[tk].add(id);
-        }
-      }
-    }
-
-    const compact = {};
-    for (const [tk, set] of Object.entries(index)) {
-      compact[tk] = Array.from(set);
-    }
-    return compact;
-  }
-
-  _findByHostToken(hostname) {
-    if (!this._hostTokenIndex) {
-      this._hostTokenIndex = this._buildHostTokenIndex();
-    }
-
-    const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
-    const candidates = new Set();
-    const tokens = String(hostname || '').toLowerCase().split('.').filter(Boolean);
-
-    for (const tk of tokens) {
-      if (tk.length < 3 || ignored.has(tk)) continue;
-      const ids = this._hostTokenIndex[tk];
-      if (Array.isArray(ids)) {
-        ids.forEach(id => candidates.add(id));
-      }
-    }
-
-    return Array.from(candidates);
-  }
-
-  _buildUrlCacheKey(url) {
-    const method = (typeof $request !== 'undefined' && $request && $request.method)
-      ? String($request.method).toUpperCase()
-      : 'GET';
-
-    try {
-      const u = new URL(url);
-      return `${method}|${u.hostname.toLowerCase()}|${u.pathname}`;
-    } catch (e) {
-      return `${method}|${String(url || '').split('?')[0]}`;
-    }
-  }
-
-  _extractHostnameFromCacheKey(cacheKey) {
-    if (!cacheKey || typeof cacheKey !== 'string') return '';
-    const first = cacheKey.indexOf('|');
-    if (first < 0) return '';
-    const second = cacheKey.indexOf('|', first + 1);
-    if (second < 0) return '';
-    return cacheKey.slice(first + 1, second);
-  }
-
-  _getHostname(url) {
-    let hostname = this._hostnameCache.get(url);
-    if (hostname === undefined) {
-      try {
-        hostname = new URL(url).hostname;
-      } catch (e) {
-        // 如果URL解析失败，返回空字符串
-        hostname = '';
-      }
-      this._hostnameCache.set(url, hostname);
-      
-      // 限制缓存大小
-      if (this._hostnameCache.size > this._maxHostnameCacheSize) {
-        const firstKey = this._hostnameCache.keys().next().value;
-        this._hostnameCache.delete(firstKey);
-      }
-    }
-    return hostname;
-  }
-
-  _findByPrefix(hostname) {
-    if (typeof findByPrefix === 'function') return findByPrefix(hostname);
-
-    const h = hostname.toLowerCase();
-    if (this._prefixIndex.exact && this._prefixIndex.exact[h]) {
-      return { ids: this._prefixIndex.exact[h], method: 'exact', matched: h };
-    }
-    if (this._prefixIndex.suffix) {
-      for (const [suffix, ids] of Object.entries(this._prefixIndex.suffix)) {
-        if (h.endsWith('.' + suffix) || h === suffix) {
-          return { ids, method: 'suffix', matched: suffix };
-        }
-      }
-    }
-    if (this._prefixIndex.keyword) {
-      for (const [kw, ids] of Object.entries(this._prefixIndex.keyword)) {
-        if (h.includes(kw)) {
-          return { ids, method: 'keyword', matched: kw };
-        }
-      }
-    }
-    return null;
-  }
-
-  _saveUrlCache(force = false) {
-    if (!this._urlCache || typeof $prefs === 'undefined') return;
-
-    const now = Date.now();
-    if (!force && (now - this._persistMeta.lastPersistAt) < this._persistIntervalMs) return;
-
-    const entries = Object.entries(this._urlCache)
-      .filter(([, v]) => v && typeof v.ts === 'number' && (now - v.ts) < this._cacheTtlMs)
-      .sort((a, b) => b[1].ts - a[1].ts)
-      .slice(0, this._persistLimit);
-
-    try {
-      $prefs.setValueForKey(this._urlCacheKey, JSON.stringify(Object.fromEntries(entries)));
-      this._persistMeta.lastPersistAt = now;
-      $prefs.setValueForKey(this._urlMetaKey, JSON.stringify(this._persistMeta));
-    } catch (e) {}
-  }
-
-  _touchUrlCache(cacheKey, id) {
-    if (!this._urlCache) return;
-
-    const now = Date.now();
-    const prev = this._urlCache[cacheKey];
-    const changed = !prev || prev.id !== id;
-
-    this._urlCache[cacheKey] = { id, ts: now };
-    this._saveUrlCache(changed);
   }
 
   async load() {
-    Logger.debug('ManifestLoader', `Lazy load v${BUILTIN_MANIFEST?.version || '22.0.0'}`);
-    return this._createLazyProxy();
+    if (this._manifest) return this._manifest;
+
+    const url = `${CONFIG.REMOTE_BASE}/manifest.json?t=${Date.now()}`;
+    const res = await HTTP.get(url);
+    if (res.statusCode !== 200 || !res.body) {
+      throw new Error(`HTTP ${res.statusCode}`);
+    }
+
+    const body = String(res.body);
+    const firstChar = body.trimStart()[0];
+    if (firstChar !== '{' && firstChar !== '[') {
+      throw new Error('Non-JSON manifest response');
+    }
+
+    const fresh = Utils.safeJsonParse(body);
+    if (!fresh || typeof fresh !== 'object') {
+      throw new Error('Invalid manifest JSON');
+    }
+
+    this._manifest = fresh;
+    this._lazyConfigs = fresh.data || {};
+    if (typeof $prefs !== 'undefined') {
+      $prefs.setValueForKey(JSON.stringify(fresh), this._cacheKey);
+    }
+    return fresh;
   }
 
-  _createLazyProxy() {
-    const self = this;
+  getManifest() {
+    return this._manifest;
+  }
 
-    return {
-      findMatch: (url) => {
-        const cacheKey = self._buildUrlCacheKey(url);
+  findByUrl(url) {
+    if (!url) return null;
 
-        // 本次运行内的热路径缓存（避免同URL重复匹配）
-        if (self._memoizedMatches.has(cacheKey)) {
-          return self._memoizedMatches.get(cacheKey);
-        }
+    const cacheKey = url;
+    const memo = this._memoizedMatches.get(cacheKey);
+    if (memo !== undefined) return memo;
 
-        if (self._urlCache) {
-          const cached = self._urlCache[cacheKey];
-          if (cached && (Date.now() - cached.ts) < self._cacheTtlMs) {
-            Logger.debug('ManifestLoader', `Cache hit: ${cached.id}`);
-            self._incrementStat('cacheHit');
-            self._touchUrlCache(cacheKey, cached.id);
-            self._memoizedMatches.set(cacheKey, cached.id);
-            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-              const firstKey = self._memoizedMatches.keys().next().value;
-              self._memoizedMatches.delete(firstKey);
-            }
-            return cached.id;
-          }
-        }
-        self._incrementStat('cacheMiss');
+    const data = this._lazyConfigs || {};
+    const candidates = Object.keys(data);
 
-        let candidates = [];
-        let hostname = self._extractHostnameFromCacheKey(cacheKey);
+    for (const id of candidates) {
+      let regex = this._regexCache.get(id);
+
+      if (!regex && data[id]) {
+        const patternStr = data[id].urlPattern;
+        if (!patternStr) continue;
 
         try {
-          if (!hostname) hostname = self._getHostname(url);
-          if (!hostname) throw new Error('Invalid URL');
-          const matchInfo = self._findByPrefix(hostname);
-
-          if (matchInfo) {
-            candidates = matchInfo.ids;
-            self._incrementStat(matchInfo.method);
-            Logger.debug('ManifestLoader', `Prefix ${matchInfo.method}: ${matchInfo.matched}`);
-          } else {
-            self._incrementStat('missPrefix');
-            const tokenCandidates = self._findByHostToken(hostname);
-            if (tokenCandidates.length > 0) {
-              candidates = tokenCandidates;
-              self._incrementStat('tokenNarrow');
-              Logger.debug('ManifestLoader', `Token narrow: ${hostname} -> ${tokenCandidates.length}`);
-            } else {
-              Logger.debug('ManifestLoader', 'MISS_PREFIX: no prefix/token match');
-            }
-          }
+          regex = new RegExp(patternStr);
+          this._regexCache.set(id, regex);
         } catch (e) {
-          self._incrementStat('urlParseFail');
-          Logger.debug('ManifestLoader', 'URL_PARSE_FAIL: parse url failed');
+          continue;
         }
+      }
 
-        if (candidates.length === 0) {
-          self._incrementStat('fallback');
-          candidates = Object.keys(self._lazyConfigs);
-          Logger.debug('ManifestLoader', `Fallback: scanning ${candidates.length} patterns`);
+      if (regex && regex.test(url)) {
+        this._memoizedMatches.set(cacheKey, id);
+        if (this._memoizedMatches.size > this._maxMemoizedMatchesSize) {
+          const firstKey = this._memoizedMatches.keys().next().value;
+          this._memoizedMatches.delete(firstKey);
         }
+        return id;
+      }
+    }
 
-        for (const id of candidates) {
-          let regex = self._regexCache.get(id);
-
-          if (!regex && self._lazyConfigs[id]) {
-            const patternStr = self._lazyConfigs[id].urlPattern;
-            if (!patternStr) continue;
-
-            try {
-              regex = new RegExp(patternStr);
-              self._regexCache.set(id, regex);
-            } catch (e) {
-              self._incrementStat('invalidPattern');
-              Logger.error('ManifestLoader', `INVALID_PATTERN: ${id}`);
-              continue;
-            }
-          }
-
-          if (regex && regex.test(url)) {
-            Logger.debug('ManifestLoader', `Matched: ${id} (${self._regexCache.size}/${candidates.length})`);
-            if (self._urlCache) self._touchUrlCache(cacheKey, id);
-            self._memoizedMatches.set(cacheKey, id);
-            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-              const firstKey = self._memoizedMatches.keys().next().value;
-              self._memoizedMatches.delete(firstKey);
-            }
-            return id;
-          }
-        }
-
-        self._incrementStat('missRegex');
-        Logger.warn('ManifestLoader', `MISS_REGEX: No match for ${url.substring(0, 40)}...`);
-        self._memoizedMatches.set(cacheKey, null);
-        if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-          const firstKey = self._memoizedMatches.keys().next().value;
-          self._memoizedMatches.delete(firstKey);
-        }
-        return null;
-      },
-
-      getConfigVersion: (configId) => (self._lazyConfigs[configId] ? '1.0' : null),
-      getStats: () => ({ ...self._stats }),
-      flushStats: () => self._flushStats(true)
-    };
+    this._memoizedMatches.set(cacheKey, null);
+    if (this._memoizedMatches.size > this._maxMemoizedMatchesSize) {
+      const firstKey = this._memoizedMatches.keys().next().value;
+      this._memoizedMatches.delete(firstKey);
+    }
+    return null;
   }
 }
 
@@ -1492,10 +1036,10 @@ class SimpleConfigLoader {
 class Environment {
   constructor(name) {
     this.name = name;
-    this.isQX = typeof Platform !== 'undefined' ? Platform.isQX : false;
-    this.isSurge = typeof Platform !== 'undefined' ? Platform.isSurge : false;
-    this.isLoon = typeof Platform !== 'undefined' ? Platform.isLoon : false;
-    this.isStash = typeof Platform !== 'undefined' ? Platform.isStash : false;
+    this.isQX = true;
+    this.isSurge = false;
+    this.isLoon = false;
+    this.isStash = false;
 
     this.response = (typeof $response !== 'undefined') ? $response : {};
     this.request = (typeof $request !== 'undefined') ? $request : {};
@@ -1507,7 +1051,7 @@ class Environment {
 
   getUrl() {
     let url = (this.response && this.response.url) || (this.request && this.request.url) || '';
-    if (this.isQX && typeof $request === 'string') {
+    if (typeof $request === 'string') {
       url = $request;
     }
     return url.toString();
@@ -1881,17 +1425,9 @@ class VipEngine {
   }
 }
 
-// ==========================================
-// 14. 诊断函数
-// ==========================================
 
 // ==========================================
-// 诊断函数 - 在 QX 控制台运行 diagnose()
-// ==========================================
-function diagnose(urlToTest){const testUrls=urlToTest?[urlToTest]:["https://yz1018.6vh3qyu9x.com/v2/api/basic/init","https://www.v2ex.com/t/1201518","https://api.gotokeep.com/nuocha/plans"];console.log("\nUnifiedVIP 诊断工具 v22.0.0");for(const url of testUrls){try{const hostname=new URL(url).hostname;console.log("URL:",url,"HOST:",hostname);const result=typeof findByPrefix==='function'?findByPrefix(hostname):null;console.log("prefix:",result||'null')}catch(e){console.log("error:",e.message)}}return {success:true}}
-
-// ==========================================
-// 15. 主入口
+// 14. 主入口
 // ==========================================
 async function main(){
   const rid=Math.random().toString(36).substr(2,6).toUpperCase();
