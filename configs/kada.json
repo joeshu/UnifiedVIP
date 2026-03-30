@@ -1,7 +1,7 @@
 {
-  "id":"kada",
+  "urlPattern": "^https://service\\.hhdd\\.com/book2",
+  "id": "kada",
   "name": "KaDa 阅读 VIP Unlock",
-  "urlPattern":"^https:\//service\\.hhdd\\.com/book2",
   "mode": "json",
   "processor": {
     "processor": "compose",
@@ -21,7 +21,13 @@
               "data.freeFlag": 1,
               "data.freeEndTime": 9999999999999,
               "data.abilitiesFlag": 31,
-              "data.abilities": ["伴读", "拼音", "字卡", "答题", "朗读"]
+              "data.abilities": [
+                "伴读",
+                "拼音",
+                "字卡",
+                "答题",
+                "朗读"
+              ]
             }
           }
         },
