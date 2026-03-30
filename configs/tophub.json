@@ -1,7 +1,7 @@
 {
+  "urlPattern": "^https:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync",
   "id": "tophub",
   "name": "TopHub",
-  "urlPattern": "^https:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync",
   "mode": "json",
   "processor": {
     "processor": "sceneDispatcher",
