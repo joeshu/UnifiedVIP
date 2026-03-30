@@ -1,5 +1,5 @@
 {
-  "urlPattern": "^https?:\\/\\/(?:www\\.)?55i6k1g3u0\\.shop\\/.*",
+  "urlPattern": "^https?:\/\/(?:www\.)?(?:55i6k1g3u0|55d6b4o1m2|555u|555dy|555dy8|555dy3|555ef)\.\w{2,}\/.*",
   "name": "555电影去广告",
   "mode": "html",
   "htmlMarkers": [
@@ -13,7 +13,13 @@
     "bh9492.cc",
     "81680565.com",
     "32480788.com",
-    "550375.vip"
+    "550375.vip",
+    "555电影APP",
+    "countly",
+    "DF Analytics",
+    "Google tag",
+    "data-encoded",
+    "返回首页"
   ],
   "htmlReplacements": [
     {
