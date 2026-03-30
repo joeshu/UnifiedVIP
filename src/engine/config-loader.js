@@ -42,7 +42,16 @@ class SimpleConfigLoader {
         throw new Error(`HTTP ${res.statusCode}`);
       }
 
-      const fresh = Utils.safeJsonParse(res.body);
+      const body = String(res.body);
+      const firstChar = body.trimStart()[0];
+      if (firstChar !== '{' && firstChar !== '[') {
+        throw new Error('Non-JSON config response');
+      }
+
+      const fresh = Utils.safeJsonParse(body);
+      if (!fresh || typeof fresh !== 'object') {
+        throw new Error('Invalid config JSON');
+      }
 
       // 写入缓存 - 使用兼容格式
       Storage.writeConfig(versionedId, {
@@ -97,6 +106,13 @@ class SimpleConfigLoader {
         pattern: RegexPool.get(r.pattern, r.flags || 'gi'),
         replacement: r.replacement
       }));
+    }
+
+    // 预编译 HTML markers（用于短路）
+    if (Array.isArray(raw.htmlMarkers)) {
+      config._htmlMarkers = raw.htmlMarkers
+        .filter(Boolean)
+        .map(m => String(m));
     }
 
     return config;
