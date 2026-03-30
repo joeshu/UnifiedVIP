@@ -125,27 +125,65 @@ function generateDiagnoseFunction(BUILD_CONFIG) {
   return `\n// ==========================================\n// 诊断函数 - 在 QX 控制台运行 diagnose()\n// ==========================================\nfunction diagnose(urlToTest){const testUrls=urlToTest?[urlToTest]:["https://yz1018.6vh3qyu9x.com/v2/api/basic/init","https://www.v2ex.com/t/1201518","https://api.gotokeep.com/nuocha/plans"];console.log("\\nUnifiedVIP 诊断工具 v${BUILD_CONFIG.VERSION}");for(const url of testUrls){try{const hostname=new URL(url).hostname;console.log("URL:",url,"HOST:",hostname);const result=typeof findByPrefix==='function'?findByPrefix(hostname):null;console.log("prefix:",result||'null')}catch(e){console.log("error:",e.message)}}return {success:true}}`;
 }
 
+function extractHostname(pattern) {
+  if (!pattern || typeof pattern !== 'string') return null;
+  // 简化处理：直接从 pattern 中提取域名
+  // 模式通常是: ^https?:\/\/hostname 或 ^https?://hostname
+  
+  // 移除非域名部分
+  let cleaned = pattern
+    .replace(/^\^/, '')           // 移除开头的 ^
+    .replace(/\$$/, '')           // 移除结尾的 $
+    .replace(/^https\?\:/, '')    // 移除 https?:
+    .replace(/^https:\/\//, '')   // 或 https://
+    .replace(/^http:\/\//, '');   // 或 http://
+  
+  // 移除转义符序列
+  cleaned = cleaned.replace(/\\\//g, '/');  // \/ -> /
+  
+  // 现在应该是 //hostname/... 格式
+  if (cleaned.startsWith('//')) {
+    cleaned = cleaned.slice(2);
+  }
+  
+  // 提取第一个 / 之前的部分
+  const slashIdx = cleaned.indexOf('/');
+  if (slashIdx > 0) {
+    cleaned = cleaned.slice(0, slashIdx);
+  }
+  
+  // 移除可选分组 (?:www.)?
+  cleaned = cleaned.replace(/^\(\?:www\.\)\?/, '');
+  cleaned = cleaned.replace(/^www\./, '');
+  
+  // 处理转义点号: juyeye\.cc -> juyeye.cc
+  cleaned = cleaned.replace(/\\\./g, '.');
+  
+  if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleaned)) {
+    return cleaned.toLowerCase();
+  }
+  return null;
+}
+
 function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR }) {
   const autoHostSet = new Set();
+  
+  // 从 APP_REGISTRY 提取 hostname
   for (const cfg of Object.values(APP_REGISTRY)) {
-    if (!cfg || !cfg.urlPattern || typeof cfg.urlPattern !== 'string') continue;
-    // 提取 hostname 部分：// 之后到 / 之前的部分
-    const normalizedPattern = cfg.urlPattern.replace(/\\./g, '.');
-    // 匹配 //hostname/ 或 //hostname$ 格式
-    const hostMatch = normalizedPattern.match(/\/\/([^\/]+)/);
-    if (!hostMatch) continue;
-    const hostPart = hostMatch[1];
-    // 去除可选的 www. 前缀和 (?:www.)? 等分组
-    const cleanHost = hostPart.replace(/^\(\?:www\.\)\?/, '').replace(/^www\./, '');
-    if (!cleanHost) continue;
-    // 验证是合法域名格式
-    if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleanHost)) {
-      autoHostSet.add(cleanHost.toLowerCase());
-    }
+    const host = extractHostname(cfg?.urlPattern);
+    if (host) autoHostSet.add(host);
+  }
+  
+  // 从所有配置（包括纯 JSON 配置）提取 hostname
+  let allConfigs = {};
+  try { allConfigs = getAllConfigs(); } catch (e) {}
+  for (const cfg of Object.values(allConfigs)) {
+    const host = extractHostname(cfg?.urlPattern);
+    if (host) autoHostSet.add(host);
   }
 
   const manualHosts = [
-    '59.82.99.78','*.ipalfish.com','service.hhdd.com','apis.lifeweek.com.cn','fluxapi.vvebo.vip','res5.haotgame.com',
+    'juyeye.cc','*.juyeye.cc','59.82.99.78','*.ipalfish.com','service.hhdd.com','apis.lifeweek.com.cn','fluxapi.vvebo.vip','res5.haotgame.com',
     'jsq.mingcalc.cn','theater-api.sylangyue.xyz','api.iappdaily.com','api2.tophub.today','api2.tophub.app','api3.tophub.xyz',
     'api3.tophub.today','api3.tophub.app','tophub.tophubdata.com','tophub2.tophubdata.com','tophub.idaily.today','tophub2.idaily.today',
     'tophub.remai.today','tophub.iappdaiy.com','tophub.ipadown.com','service.gpstool.com','mapi.kouyuxingqiu.com','ss.landintheair.com',
@@ -157,13 +195,14 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
   const hostnames = Array.from(new Set([...manualHosts, ...Array.from(autoHostSet)])).sort();
   let conf = `# Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}\n# 构建时间: ${new Date().toISOString()}\n# APP数量: ${Object.keys(APP_REGISTRY).length}\n\n[rewrite_local]\n\n`;
 
-  let allConfigs = {};
-  try { allConfigs = getAllConfigs(); } catch (e) {
-    for (const [id, cfg] of Object.entries(APP_REGISTRY)) allConfigs[id] = { name: id, ...cfg };
+  // 获取完整配置（用于显示名称）
+  let nameLookup = {};
+  try { nameLookup = getAllConfigs(); } catch (e) {
+    for (const [id, cfg] of Object.entries(APP_REGISTRY)) nameLookup[id] = { name: id, ...cfg };
   }
 
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
-    const name = allConfigs[id]?.name || id;
+    const name = nameLookup[id]?.name || id;
     conf += `# ${name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
   }
 
