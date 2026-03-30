@@ -316,9 +316,11 @@ class VipEngine {
     let obj = Utils.safeJsonParse(body);
     if (!obj) return { body };
 
-    const factory = createProcessorFactory(this._requestId);
-    const compile = createCompiler(factory);
-    const processor = config.processor ? compile(config.processor) : null;
+    const processor = config._processor || (config.processor ? (() => {
+      const factory = createProcessorFactory(this._requestId);
+      const compile = createCompiler(factory);
+      return compile(config.processor);
+    })() : null);
 
     if (typeof processor === 'function') {
       try {

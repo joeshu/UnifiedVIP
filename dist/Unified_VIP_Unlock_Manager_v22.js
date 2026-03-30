@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-30T10:24:47.744Z
+ * 构建时间: 2026-03-30T11:43:34.313Z
  * APP数量: 21
  * ==========================================
  *
@@ -1334,6 +1334,15 @@ class SimpleConfigLoader {
     this._versionTag = (typeof BUILTIN_MANIFEST !== 'undefined' && BUILTIN_MANIFEST && BUILTIN_MANIFEST.version)
       ? String(BUILTIN_MANIFEST.version)
       : 'v1';
+
+    const g = (typeof globalThis !== 'undefined') ? globalThis : {};
+    this._memCache = g.__UVIP_CFG_MEM || (g.__UVIP_CFG_MEM = new Map());
+    this._cacheTtl = (typeof CONFIG !== 'undefined' && CONFIG.CONFIG_CACHE_TTL)
+      ? CONFIG.CONFIG_CACHE_TTL
+      : 24 * 60 * 60 * 1000;
+
+    this._factory = createProcessorFactory(this._requestId);
+    this._compiler = createCompiler(this._factory);
   }
 
   _versionedId(configId) {
@@ -1343,6 +1352,12 @@ class SimpleConfigLoader {
   async load(configId, remoteVersion) {
     const versionedId = this._versionedId(configId);
 
+    // 运行时内存缓存 (同一脚本生命周期内多次命中极速返回)
+    const memHit = this._memCache.get(versionedId);
+    if (memHit && (Date.now() - memHit.t) < this._cacheTtl) {
+      return memHit.d;
+    }
+
     // 检查缓存
     const cached = Storage.readConfig(versionedId);
 
@@ -1350,10 +1365,12 @@ class SimpleConfigLoader {
       try {
         // 解析缓存的 JSON 字符串
         const { v, t, d } = JSON.parse(cached);
-        if (v === remoteVersion && (Date.now() - t) < CONFIG.CONFIG_CACHE_TTL) {
+        if (v === remoteVersion && (Date.now() - t) < this._cacheTtl) {
           Logger.info('ConfigLoader', `${configId} cache hit`);
           // 热缓存路径：直接返回预处理后的对象，避免二次解析
-          return d;
+          const prepared = d;
+          this._memCache.set(versionedId, { t: Date.now(), d: prepared });
+          return prepared;
         }
       } catch (e) {}
     }
@@ -1388,7 +1405,9 @@ class SimpleConfigLoader {
       });
 
       // 预处理配置
-      return this._prepareConfig(fresh);
+      const prepared = this._prepareConfig(fresh);
+      this._memCache.set(versionedId, { t: Date.now(), d: prepared });
+      return prepared;
 
     } catch (e) {
       Logger.error('ConfigLoader', `${configId} failed: ${e.message}`);
@@ -1397,6 +1416,7 @@ class SimpleConfigLoader {
       if (cached) {
         Logger.warn('ConfigLoader', `${configId} using stale cache`);
         const { d } = JSON.parse(cached);
+        this._memCache.set(versionedId, { t: Date.now(), d });
         return d; // 热缓存路径
       }
       throw e;
@@ -1410,12 +1430,23 @@ class SimpleConfigLoader {
       return config;
     }
 
+    // 预编译处理器（减少每次请求的编译开销）
+    if (config.processor) {
+      try {
+        config._processor = this._compiler(config.processor);
+        config.processor = null;
+      } catch (e) {
+        // ignore compile error, fallback at runtime
+      }
+    }
+
     // 预编译正则替换规则
     if (raw.regexReplacements) {
       config._regexReplacements = raw.regexReplacements.map(r => ({
         pattern: RegexPool.get(r.pattern, r.flags || 'g'),
         replacement: r.replacement
       }));
+      config.regexReplacements = null;
     }
 
     // 预编译游戏资源规则
@@ -1425,6 +1456,7 @@ class SimpleConfigLoader {
         value: r.value,
         pattern: RegexPool.get(`"${r.field}":\\d+`, 'g')
       }));
+      config.gameResources = null;
     }
 
     // 预编译 HTML 替换规则
@@ -1433,6 +1465,7 @@ class SimpleConfigLoader {
         pattern: RegexPool.get(r.pattern, r.flags || 'gi'),
         replacement: r.replacement
       }));
+      config.htmlReplacements = null;
     }
 
     // 预编译 HTML markers（用于短路）
@@ -1440,6 +1473,7 @@ class SimpleConfigLoader {
       config._htmlMarkers = raw.htmlMarkers
         .filter(Boolean)
         .map(m => String(m));
+      config.htmlMarkers = null;
     }
 
     return config;
@@ -1767,9 +1801,11 @@ class VipEngine {
     let obj = Utils.safeJsonParse(body);
     if (!obj) return { body };
 
-    const factory = createProcessorFactory(this._requestId);
-    const compile = createCompiler(factory);
-    const processor = config.processor ? compile(config.processor) : null;
+    const processor = config._processor || (config.processor ? (() => {
+      const factory = createProcessorFactory(this._requestId);
+      const compile = createCompiler(factory);
+      return compile(config.processor);
+    })() : null);
 
     if (typeof processor === 'function') {
       try {
