@@ -1,7 +1,7 @@
 {
+  "urlPattern": "^https?:\\/\\/(?:yzy0916|yz1018|yz250907|yz0320|cfvip)\\..+\\.com\\/(?:v2|v1)\\/api\\/(?:basic\\/init|home\\/firstScreen|adInfo\\/getPageAd|home\\/body)",
   "id": "tv",
   "name": "影视去广告",
-  "urlPattern": "^https?:\\/\\/(?:yzy0916|yz1018|yz250907|yz0320|cfvip)\\..+\\.com\\/(?:v2|v1)\\/api\\/(?:basic\\/init|home\\/firstScreen|adInfo\\/getPageAd|home\\/body)",
   "mode": "json",
   "processor": {
     "processor": "sceneDispatcher",
@@ -33,7 +33,9 @@
                 {
                   "processor": "deleteFields",
                   "params": {
-                    "paths": ["data.focusAdList"]
+                    "paths": [
+                      "data.focusAdList"
+                    ]
                   }
                 },
                 {
@@ -54,7 +56,10 @@
           "then": {
             "processor": "deleteFields",
             "params": {
-              "paths": ["data.floatAd", "data.popupAd"]
+              "paths": [
+                "data.floatAd",
+                "data.popupAd"
+              ]
             }
           }
         },
