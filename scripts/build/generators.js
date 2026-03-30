@@ -109,7 +109,9 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
   const autoHostSet = new Set();
   for (const cfg of Object.values(APP_REGISTRY)) {
     if (!cfg || !cfg.urlPattern || typeof cfg.urlPattern !== 'string') continue;
-    const hostMatches = cfg.urlPattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+    // 处理转义的点号 \\. 为普通点号，以便正确提取 hostname
+    const normalizedPattern = cfg.urlPattern.replace(/\\./g, '.');
+    const hostMatches = normalizedPattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
     for (const host of hostMatches) {
       const h = host.toLowerCase();
       if (h.includes('\\/')) continue;
