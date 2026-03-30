@@ -10,6 +10,35 @@ class SimpleManifestLoader {
     this._regexCache = new Map();
     this._memoizedMatches = new Map();
     this._maxMemoizedMatchesSize = 300;
+    // 预编译 hostname 前缀 → [configId] 索引
+    this._prefixIndex = new Map();
+    this._buildPrefixIndex();
+  }
+
+  _buildPrefixIndex() {
+    const ids = Object.keys(this._lazyConfigs);
+    for (const id of ids) {
+      const patternStr = this._lazyConfigs[id] && this._lazyConfigs[id].urlPattern;
+      if (!patternStr) continue;
+      let prefix = null;
+      try {
+        // 提取 hostname 首段作为前缀（tv/keep/vvebo 等）
+        const m = patternStr.match(/https?:\/\/([^.\/]+)/);
+        if (m && m[1]) prefix = m[1];
+      } catch (e) {}
+      if (prefix) {
+        if (!this._prefixIndex.has(prefix)) this._prefixIndex.set(prefix, []);
+        this._prefixIndex.get(prefix).push(id);
+      }
+    }
+  }
+
+  _getPrefixCandidates(url) {
+    try {
+      const m = url.match(/https?:\/\/([^.\/]+)/);
+      if (m && m[1]) return this._prefixIndex.get(m[1]) || null;
+    } catch (e) {}
+    return null;
   }
 
   async load() {
@@ -27,7 +56,10 @@ class SimpleManifestLoader {
           return self._memoizedMatches.get(cacheKey);
         }
 
-        const ids = Object.keys(self._lazyConfigs || {});
+        // 前缀快速命中
+        const prefixCandidates = self._getPrefixCandidates(url);
+        const ids = prefixCandidates || Object.keys(self._lazyConfigs || {});
+
         for (const id of ids) {
           let regex = self._regexCache.get(id);
           if (!regex && self._lazyConfigs[id]) {

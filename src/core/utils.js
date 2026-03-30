@@ -3,12 +3,7 @@
 
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
-    if (typeof str !== 'string') return defaultVal;
-    const s = str.trim();
-    if (!s) return defaultVal;
-    const c = s[0];
-    if (c !== '{' && c !== '[') return defaultVal;
-    try { return JSON.parse(s); } catch (e) { return defaultVal; }
+    try { return JSON.parse(str); } catch (e) { return defaultVal; }
   },
 
   safeJsonStringify: (obj) => {

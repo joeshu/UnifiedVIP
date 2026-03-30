@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-30T15:34:49.543Z
+ * 构建时间: 2026-03-30T16:05:20.171Z
  * APP数量: 21
  * ==========================================
  *
@@ -340,12 +340,7 @@ const HTTP = (() => {
 
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
-    if (typeof str !== 'string') return defaultVal;
-    const s = str.trim();
-    if (!s) return defaultVal;
-    const c = s[0];
-    if (c !== '{' && c !== '[') return defaultVal;
-    try { return JSON.parse(s); } catch (e) { return defaultVal; }
+    try { return JSON.parse(str); } catch (e) { return defaultVal; }
   },
 
   safeJsonStringify: (obj) => {
@@ -768,6 +763,35 @@ class SimpleManifestLoader {
     this._regexCache = new Map();
     this._memoizedMatches = new Map();
     this._maxMemoizedMatchesSize = 300;
+    // 预编译 hostname 前缀 → [configId] 索引
+    this._prefixIndex = new Map();
+    this._buildPrefixIndex();
+  }
+
+  _buildPrefixIndex() {
+    const ids = Object.keys(this._lazyConfigs);
+    for (const id of ids) {
+      const patternStr = this._lazyConfigs[id] && this._lazyConfigs[id].urlPattern;
+      if (!patternStr) continue;
+      let prefix = null;
+      try {
+        // 提取 hostname 首段作为前缀（tv/keep/vvebo 等）
+        const m = patternStr.match(/https?:\/\/([^.\/]+)/);
+        if (m && m[1]) prefix = m[1];
+      } catch (e) {}
+      if (prefix) {
+        if (!this._prefixIndex.has(prefix)) this._prefixIndex.set(prefix, []);
+        this._prefixIndex.get(prefix).push(id);
+      }
+    }
+  }
+
+  _getPrefixCandidates(url) {
+    try {
+      const m = url.match(/https?:\/\/([^.\/]+)/);
+      if (m && m[1]) return this._prefixIndex.get(m[1]) || null;
+    } catch (e) {}
+    return null;
   }
 
   async load() {
@@ -785,7 +809,10 @@ class SimpleManifestLoader {
           return self._memoizedMatches.get(cacheKey);
         }
 
-        const ids = Object.keys(self._lazyConfigs || {});
+        // 前缀快速命中
+        const prefixCandidates = self._getPrefixCandidates(url);
+        const ids = prefixCandidates || Object.keys(self._lazyConfigs || {});
+
         for (const id of ids) {
           let regex = self._regexCache.get(id);
           if (!regex && self._lazyConfigs[id]) {
@@ -1029,11 +1056,7 @@ class Environment {
   }
 
   done(result) {
-    if (typeof $done === 'function') {
-      $done(result);
-    } else {
-      console.log('[DONE]', result);
-    }
+    $done(result);
   }
 }
 
@@ -1078,36 +1101,6 @@ class VipEngine {
     }
   }
 
-  _delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  _shouldRetryError(error) {
-    const msg = String((error && error.message) || '').toLowerCase();
-    return msg.includes('timeout') || msg.includes('network') || msg.includes('timed out');
-  }
-
-  async _requestWithRetry(requestFn, retryConfig = {}) {
-    const retries = Math.max(0, Number(retryConfig.retries || 0));
-    const delayMs = Math.max(0, Number(retryConfig.delayMs || 300));
-
-    let lastError = null;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        return await requestFn();
-      } catch (e) {
-        lastError = e;
-        if (attempt >= retries || !this._shouldRetryError(e)) {
-          throw e;
-        }
-        Logger.warn('VipEngine', `Retry ${attempt + 1}/${retries} after error: ${e.message}`);
-        await this._delay(delayMs);
-      }
-    }
-
-    throw lastError || new Error('Unknown request error');
-  }
-
   async _processForward(config) {
     const statusTexts = config.statusTexts || {
       '200': 'OK',
@@ -1150,15 +1143,10 @@ class VipEngine {
       timeout: config.timeout || 10000
     };
 
-    const retryConfig = {
-      retries: typeof config.retryTimes === 'number' ? config.retryTimes : 1,
-      delayMs: typeof config.retryDelayMs === 'number' ? config.retryDelayMs : 300
-    };
-
     Logger.info('Forward', `Forwarding to ${options.url}`);
 
     try {
-      const response = await this._requestWithRetry(() => HTTP.post(options), retryConfig);
+      const response = await HTTP.post(options);
       const statusCode = response.statusCode || 200;
       const statusText = statusTexts[String(statusCode)] || 'Unknown';
 
@@ -1251,15 +1239,7 @@ class VipEngine {
     }
 
     try {
-      const retryConfig = {
-        retries: typeof config.retryTimes === 'number' ? config.retryTimes : 1,
-        delayMs: typeof config.retryDelayMs === 'number' ? config.retryDelayMs : 300
-      };
-
-      const response = await this._requestWithRetry(
-        () => HTTP.get(config.remoteUrl, config.timeout || 10000),
-        retryConfig
-      );
+      const response = await HTTP.get(config.remoteUrl, config.timeout || 10000);
 
       if (response.statusCode !== 200 || !response.body) {
         return {};

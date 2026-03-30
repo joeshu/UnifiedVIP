@@ -41,11 +41,7 @@ class Environment {
   }
 
   done(result) {
-    if (typeof $done === 'function') {
-      $done(result);
-    } else {
-      console.log('[DONE]', result);
-    }
+    $done(result);
   }
 }
 
@@ -90,36 +86,6 @@ class VipEngine {
     }
   }
 
-  _delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  _shouldRetryError(error) {
-    const msg = String((error && error.message) || '').toLowerCase();
-    return msg.includes('timeout') || msg.includes('network') || msg.includes('timed out');
-  }
-
-  async _requestWithRetry(requestFn, retryConfig = {}) {
-    const retries = Math.max(0, Number(retryConfig.retries || 0));
-    const delayMs = Math.max(0, Number(retryConfig.delayMs || 300));
-
-    let lastError = null;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        return await requestFn();
-      } catch (e) {
-        lastError = e;
-        if (attempt >= retries || !this._shouldRetryError(e)) {
-          throw e;
-        }
-        Logger.warn('VipEngine', `Retry ${attempt + 1}/${retries} after error: ${e.message}`);
-        await this._delay(delayMs);
-      }
-    }
-
-    throw lastError || new Error('Unknown request error');
-  }
-
   async _processForward(config) {
     const statusTexts = config.statusTexts || {
       '200': 'OK',
@@ -162,15 +128,10 @@ class VipEngine {
       timeout: config.timeout || 10000
     };
 
-    const retryConfig = {
-      retries: typeof config.retryTimes === 'number' ? config.retryTimes : 1,
-      delayMs: typeof config.retryDelayMs === 'number' ? config.retryDelayMs : 300
-    };
-
     Logger.info('Forward', `Forwarding to ${options.url}`);
 
     try {
-      const response = await this._requestWithRetry(() => HTTP.post(options), retryConfig);
+      const response = await HTTP.post(options);
       const statusCode = response.statusCode || 200;
       const statusText = statusTexts[String(statusCode)] || 'Unknown';
 
@@ -263,15 +224,7 @@ class VipEngine {
     }
 
     try {
-      const retryConfig = {
-        retries: typeof config.retryTimes === 'number' ? config.retryTimes : 1,
-        delayMs: typeof config.retryDelayMs === 'number' ? config.retryDelayMs : 300
-      };
-
-      const response = await this._requestWithRetry(
-        () => HTTP.get(config.remoteUrl, config.timeout || 10000),
-        retryConfig
-      );
+      const response = await HTTP.get(config.remoteUrl, config.timeout || 10000);
 
       if (response.statusCode !== 200 || !response.body) {
         return {};
