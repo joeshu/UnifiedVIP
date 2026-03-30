@@ -5,32 +5,17 @@
   "mode": "html",
   "htmlReplacements": [
     {
-      "pattern": "<meta[^>]*name=[\"']wwads-cn-verify[\"'][^>]*>",
+      "pattern": "<meta[^>]*name=[\"']wwads-cn-verify[\"'][^>]*>|<script[^>]*src=[\"'][^\"']*(?:cdn\\.wwads\\.cn|pagead2\\.googlesyndication\\.com|google-analytics\\.com)[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<script[^>]*src=[\"'][^\"']*cdn\\.wwads\\.cn[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
-      "replacement": "",
-      "flags": "gi"
-    },
-    {
-      "pattern": "<script[^>]*src=[\"'][^\"']*pagead2\\.googlesyndication\\.com[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
-      "replacement": "",
-      "flags": "gi"
-    },
-    {
-      "pattern": "<div[^>]*id=[\"']pro-campaign-container[\"'][^>]*>[\\s\\S]*?<\\/script>",
+      "pattern": "<div[^>]*id=[\"']pro-campaign-container[\"'][^>]*>[\\s\\S]*?<\\/div>",
       "replacement": "",
       "flags": "gi"
     },
     {
       "pattern": "<div[^>]*class=[\"'][^\"']*wwads[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/div>",
-      "replacement": "",
-      "flags": "gi"
-    },
-    {
-      "pattern": "<script[^>]*src=[\"'][^\"']*google-analytics\\.com[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     },
