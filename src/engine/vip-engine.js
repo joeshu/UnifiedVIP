@@ -74,11 +74,6 @@ class VipEngine {
     const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
     if (!normalizedBody) return { body: '{}' };
 
-    const maxSize = typeof CONFIG !== 'undefined' ? CONFIG.MAX_BODY_SIZE : 5 * 1024 * 1024;
-    if (normalizedBody.length > maxSize) {
-      return { body: normalizedBody };
-    }
-
     switch (config.mode) {
       case 'json':
         return this._processJson(normalizedBody, config);

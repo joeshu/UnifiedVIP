@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-30T13:02:08.695Z
+ * 构建时间: 2026-03-30T15:34:49.543Z
  * APP数量: 21
  * ==========================================
  *
@@ -22,8 +22,8 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: false,
-  VERBOSE_PATTERN_LOG: false,
+  DEBUG: true,
+  VERBOSE_PATTERN_LOG: true,
 
   URL_CACHE_KEY: 'url_match_v22_lazy',
   URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
@@ -1061,11 +1061,6 @@ class VipEngine {
 
     const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
     if (!normalizedBody) return { body: '{}' };
-
-    const maxSize = typeof CONFIG !== 'undefined' ? CONFIG.MAX_BODY_SIZE : 5 * 1024 * 1024;
-    if (normalizedBody.length > maxSize) {
-      return { body: normalizedBody };
-    }
 
     switch (config.mode) {
       case 'json':
