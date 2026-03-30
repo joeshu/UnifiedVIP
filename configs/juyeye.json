@@ -8,7 +8,10 @@
     "ggsou.com",
     "9377.com",
     "7505",
-    "ytzhmexp"
+    "ytzhmexp",
+    "system.ispc",
+    "404.html",
+    "window.location.href"
   ],
   "htmlReplacements": [
     {
