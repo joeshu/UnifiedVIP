@@ -1,492 +1,125 @@
-class SimpleManifestLoader {
+// src/engine/config-loader.js
+// 配置加载器 - 修复版 (与 vip-unlock-configs 兼容)
+
+class SimpleConfigLoader {
   constructor(requestId) {
     this._requestId = requestId;
-    this._urlCache = typeof Platform !== 'undefined' && Platform.isQX ? {} : null;
-    this._memoizedMatches = new Map(); // QX轻量化：缓存本轮匹配结果
-    this._maxMemoizedMatchesSize = 300;
-
-    const runtimeCfg = (typeof CONFIG !== 'undefined' && CONFIG) ? CONFIG : {};
-
-    this._urlCacheKey = runtimeCfg.URL_CACHE_KEY || 'url_match_v22_lazy';
-    this._urlMetaKey = runtimeCfg.URL_CACHE_META_KEY || `${this._urlCacheKey}_meta`;
-    this._urlCacheMigratedKey = runtimeCfg.URL_CACHE_MIGRATED_KEY || `${this._urlCacheKey}_migrated`;
-
-    const legacyKeys = Array.isArray(runtimeCfg.URL_CACHE_LEGACY_KEYS)
-      ? runtimeCfg.URL_CACHE_LEGACY_KEYS
-      : ['url_match_v22', 'url_match_v21_lazy', 'url_match_cache_v22'];
-
-    this._legacyUrlCacheKeys = [this._urlCacheKey, ...legacyKeys]
-      .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
-    this._legacyMetaKeys = [this._urlMetaKey, ...this._legacyUrlCacheKeys.map(k => `${k}_meta`)]
-      .filter((k, i, arr) => typeof k === 'string' && k && arr.indexOf(k) === i);
-
-    this._cacheTtlMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_TTL_MS, 3600000);
-    this._persistIntervalMs = this._readPositiveNumber(runtimeCfg.URL_CACHE_PERSIST_INTERVAL_MS, 15000);
-    this._persistLimit = Math.max(10, Math.min(200, Math.floor(this._readPositiveNumber(runtimeCfg.URL_CACHE_LIMIT, 50))));
-
-    this._statsEnabled = runtimeCfg.ENABLE_MATCH_STATS === true;
-    this._statsKey = runtimeCfg.MATCH_STATS_KEY || 'uvip_match_stats_v1';
-    this._statsMetaKey = runtimeCfg.MATCH_STATS_META_KEY || `${this._statsKey}_meta`;
-    this._statsFlushIntervalMs = this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_INTERVAL_MS, 60000);
-    this._statsFlushEveryN = Math.max(10, Math.floor(this._readPositiveNumber(runtimeCfg.MATCH_STATS_FLUSH_EVERY_N, 20)));
-    this._statsMeta = this._statsEnabled ? this._loadStatsMeta() : { lastFlushAt: 0 };
-    this._stats = this._statsEnabled ? this._loadStats() : null;
-    this._statsPending = 0;
-
-    this._regexCache = new Map();
-    this._hostnameCache = new Map();
-    this._maxHostnameCacheSize = 200;
-    this._staticExtRe = /\.(?:js|css|jpg|jpeg|png|webp|gif|svg|woff2?|ttf|otf|eot|mp4|mov|m4v|avi|mkv|flv|mp3|m4a|aac|wav|ico)$/i;
-    this._prefixIndex = typeof PREFIX_INDEX !== 'undefined' ? PREFIX_INDEX : {};
-    this._lazyConfigs = typeof BUILTIN_MANIFEST !== 'undefined' ? BUILTIN_MANIFEST.configs : {};
-    this._persistMeta = this._loadPersistMeta();
-    this._hostTokenIndex = null;
-
-    if (this._urlCache && typeof $prefs !== 'undefined') {
-      const migrated = this._isLegacyMigrated();
-      const lookupKeys = migrated ? [this._urlCacheKey] : this._legacyUrlCacheKeys;
-      const { raw, keyUsed } = this._readFirstAvailable(lookupKeys);
-
-      if (raw) {
-        this._restoreUrlCache(raw);
-      }
-
-      if (!migrated) {
-        if (raw && keyUsed && keyUsed !== this._urlCacheKey) {
-          this._saveUrlCache(true);
-        }
-        this._cleanupLegacyKeys();
-        this._markLegacyMigrated();
-      }
-    }
+    this._versionTag = (typeof BUILTIN_MANIFEST !== 'undefined' && BUILTIN_MANIFEST && BUILTIN_MANIFEST.version)
+      ? String(BUILTIN_MANIFEST.version)
+      : 'v1';
   }
 
-  _readPositiveNumber(value, fallback) {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? n : fallback;
+  _versionedId(configId) {
+    return `${configId}@${this._versionTag}`;
   }
 
-  _readFirstAvailable(keys) {
-    if (typeof $prefs === 'undefined') return { raw: null, keyUsed: null };
+  async load(configId, remoteVersion) {
+    const versionedId = this._versionedId(configId);
 
-    for (const key of keys) {
+    // 检查缓存
+    const cached = Storage.readConfig(versionedId);
+
+    if (cached) {
       try {
-        const raw = $prefs.valueForKey(key);
-        if (raw) return { raw, keyUsed: key };
+        // 解析缓存的 JSON 字符串
+        const { v, t, d } = JSON.parse(cached);
+        if (v === remoteVersion && (Date.now() - t) < CONFIG.CONFIG_CACHE_TTL) {
+          Logger.info('ConfigLoader', `${configId} cache hit`);
+          // 热缓存路径：直接返回预处理后的对象，避免二次解析
+          return d;
+        }
       } catch (e) {}
     }
 
-    return { raw: null, keyUsed: null };
-  }
+    // 远程加载
+    const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json?t=${Date.now()}`;
 
-  _isLegacyMigrated() {
-    if (typeof $prefs === 'undefined') return true;
+    Logger.info('ConfigLoader', `${configId} fetching...`);
+
     try {
-      return $prefs.valueForKey(this._urlCacheMigratedKey) === '1';
+      const res = await HTTP.get(url);
+      if (res.statusCode !== 200 || !res.body) {
+        throw new Error(`HTTP ${res.statusCode}`);
+      }
+
+      const body = String(res.body);
+      const firstChar = body.trimStart()[0];
+      if (firstChar !== '{' && firstChar !== '[') {
+        throw new Error('Non-JSON config response');
+      }
+
+      const fresh = Utils.safeJsonParse(body);
+      if (!fresh || typeof fresh !== 'object') {
+        throw new Error('Invalid config JSON');
+      }
+
+      // 写入缓存 - 使用兼容格式
+      Storage.writeConfig(versionedId, {
+        v: remoteVersion,
+        t: Date.now(),
+        d: fresh
+      });
+
+      // 预处理配置
+      return this._prepareConfig(fresh);
+
     } catch (e) {
-      return false;
-    }
-  }
+      Logger.error('ConfigLoader', `${configId} failed: ${e.message}`);
 
-  _markLegacyMigrated() {
-    if (typeof $prefs === 'undefined') return;
-    try {
-      $prefs.setValueForKey(this._urlCacheMigratedKey, '1');
-    } catch (e) {}
-  }
-
-  _cleanupLegacyKeys() {
-    if (typeof $prefs === 'undefined') return;
-
-    const keysToDelete = [
-      ...this._legacyUrlCacheKeys.filter(k => k !== this._urlCacheKey),
-      ...this._legacyMetaKeys.filter(k => k !== this._urlMetaKey)
-    ];
-
-    for (const key of keysToDelete) {
-      try { $prefs.removeValueForKey(key); } catch (e) {}
-    }
-  }
-
-  _restoreUrlCache(raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return;
-
-      const now = Date.now();
-      for (const [k, v] of Object.entries(parsed)) {
-        if (!v || typeof v !== 'object') continue;
-        if (!v.id || !v.ts) continue;
-        if (now - v.ts < this._cacheTtlMs) {
-          this._urlCache[k] = { id: v.id, ts: v.ts };
-        }
+      // 降级使用缓存（即使过期）
+      if (cached) {
+        Logger.warn('ConfigLoader', `${configId} using stale cache`);
+        const { d } = JSON.parse(cached);
+        return d; // 热缓存路径
       }
-    } catch (e) {}
-  }
-
-  _loadPersistMeta() {
-    if (typeof $prefs === 'undefined') return { lastPersistAt: 0 };
-
-    const { raw } = this._readFirstAvailable(this._legacyMetaKeys);
-    if (!raw) return { lastPersistAt: 0 };
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.lastPersistAt === 'number') {
-        return { lastPersistAt: parsed.lastPersistAt };
-      }
-    } catch (e) {}
-
-    return { lastPersistAt: 0 };
-  }
-
-  _loadStatsMeta() {
-    if (typeof $prefs === 'undefined') return { lastFlushAt: 0 };
-
-    try {
-      const raw = $prefs.valueForKey(this._statsMetaKey);
-      if (!raw) return { lastFlushAt: 0 };
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.lastFlushAt === 'number') {
-        return { lastFlushAt: parsed.lastFlushAt };
-      }
-    } catch (e) {}
-
-    return { lastFlushAt: 0 };
-  }
-
-  _loadStats() {
-    const defaults = {
-      cacheHit: 0,
-      cacheMiss: 0,
-      exact: 0,
-      suffix: 0,
-      keyword: 0,
-      fallback: 0,
-      tokenNarrow: 0,
-      missPrefix: 0,
-      missRegex: 0,
-      invalidPattern: 0,
-      urlParseFail: 0,
-      updatedAt: Date.now()
-    };
-
-    if (typeof $prefs === 'undefined') return defaults;
-
-    try {
-      const raw = $prefs.valueForKey(this._statsKey);
-      if (!raw) return defaults;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return defaults;
-      return { ...defaults, ...parsed, updatedAt: Date.now() };
-    } catch (e) {
-      return defaults;
+      throw e;
     }
   }
 
-  _incrementStat(key, delta = 1) {
-    if (!this._statsEnabled) return;
-    if (!this._stats || typeof this._stats !== 'object') return;
-    this._stats[key] = (this._stats[key] || 0) + delta;
-    this._stats.updatedAt = Date.now();
-    this._statsPending += 1;
-    this._flushStats(false);
-  }
+  _prepareConfig(raw) {
+    const config = Object.assign({}, raw);
 
-  _flushStats(force = false) {
-    if (!this._statsEnabled) return;
-    if (typeof $prefs === 'undefined' || !this._stats) return;
-
-    const now = Date.now();
-    const reachCount = this._statsPending >= this._statsFlushEveryN;
-    const reachTime = (now - (this._statsMeta.lastFlushAt || 0)) >= this._statsFlushIntervalMs;
-
-    if (!force && !reachCount && !reachTime) return;
-
-    try {
-      $prefs.setValueForKey(this._statsKey, JSON.stringify(this._stats));
-      this._statsMeta.lastFlushAt = now;
-      $prefs.setValueForKey(this._statsMetaKey, JSON.stringify(this._statsMeta));
-      this._statsPending = 0;
-    } catch (e) {}
-  }
-
-  _buildHostTokenIndex() {
-    const index = {};
-    const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
-
-    for (const [id, cfg] of Object.entries(this._lazyConfigs || {})) {
-      const pattern = cfg && cfg.urlPattern;
-      if (!pattern || typeof pattern !== 'string') continue;
-
-      const hosts = pattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-      for (const host of hosts) {
-        const tokens = host.toLowerCase().split('.').filter(Boolean);
-        for (const tk of tokens) {
-          if (tk.length < 3 || ignored.has(tk)) continue;
-          if (!index[tk]) index[tk] = new Set();
-          index[tk].add(id);
-        }
-      }
+    if (config.mode === 'forward' || config.mode === 'remote') {
+      return config;
     }
 
-    const compact = {};
-    for (const [tk, set] of Object.entries(index)) {
-      compact[tk] = Array.from(set);
-    }
-    return compact;
-  }
-
-  _findByHostToken(hostname) {
-    if (!this._hostTokenIndex) {
-      this._hostTokenIndex = this._buildHostTokenIndex();
+    // 预编译正则替换规则
+    if (raw.regexReplacements) {
+      config._regexReplacements = raw.regexReplacements.map(r => ({
+        pattern: RegexPool.get(r.pattern, r.flags || 'g'),
+        replacement: r.replacement
+      }));
     }
 
-    const ignored = new Set(['www', 'api', 'com', 'net', 'org', 'cn', 'co', 'io', 'app', 'vip', 'xyz']);
-    const candidates = new Set();
-    const tokens = String(hostname || '').toLowerCase().split('.').filter(Boolean);
-
-    for (const tk of tokens) {
-      if (tk.length < 3 || ignored.has(tk)) continue;
-      const ids = this._hostTokenIndex[tk];
-      if (Array.isArray(ids)) {
-        ids.forEach(id => candidates.add(id));
-      }
+    // 预编译游戏资源规则
+    if (raw.gameResources) {
+      config._gameResources = raw.gameResources.map(r => ({
+        field: r.field,
+        value: r.value,
+        pattern: RegexPool.get(`"${r.field}":\\d+`, 'g')
+      }));
     }
 
-    return Array.from(candidates);
-  }
-
-  _buildUrlCacheKey(url) {
-    const method = (typeof $request !== 'undefined' && $request && $request.method)
-      ? String($request.method).toUpperCase()
-      : 'GET';
-
-    try {
-      const u = new URL(url);
-      return `${method}|${u.hostname.toLowerCase()}|${u.pathname}`;
-    } catch (e) {
-      return `${method}|${String(url || '').split('?')[0]}`;
+    // 预编译 HTML 替换规则
+    if (raw.htmlReplacements) {
+      config._htmlReplacements = raw.htmlReplacements.map(r => ({
+        pattern: RegexPool.get(r.pattern, r.flags || 'gi'),
+        replacement: r.replacement
+      }));
     }
-  }
 
-  _extractHostnameFromCacheKey(cacheKey) {
-    if (!cacheKey || typeof cacheKey !== 'string') return '';
-    const first = cacheKey.indexOf('|');
-    if (first < 0) return '';
-    const second = cacheKey.indexOf('|', first + 1);
-    if (second < 0) return '';
-    return cacheKey.slice(first + 1, second);
-  }
-
-  _extractPathFromCacheKey(cacheKey) {
-    if (!cacheKey || typeof cacheKey !== 'string') return '';
-    const second = cacheKey.indexOf('|', cacheKey.indexOf('|') + 1);
-    if (second < 0) return '';
-    return cacheKey.slice(second + 1);
-  }
-
-  _isFastSkipPath(pathname) {
-    if (!pathname) return false;
-    if (pathname.startsWith('/api/')) return true;
-    if (pathname.startsWith('/static/')) return true;
-    if (pathname.startsWith('/assets/')) return true;
-    return this._staticExtRe.test(pathname);
-  }
-
-  _getHostname(url) {
-    let hostname = this._hostnameCache.get(url);
-    if (hostname === undefined) {
-      try {
-        hostname = new URL(url).hostname;
-      } catch (e) {
-        // 如果URL解析失败，返回空字符串
-        hostname = '';
-      }
-      this._hostnameCache.set(url, hostname);
-      
-      // 限制缓存大小
-      if (this._hostnameCache.size > this._maxHostnameCacheSize) {
-        const firstKey = this._hostnameCache.keys().next().value;
-        this._hostnameCache.delete(firstKey);
-      }
+    // 预编译 HTML markers（用于短路）
+    if (Array.isArray(raw.htmlMarkers)) {
+      config._htmlMarkers = raw.htmlMarkers
+        .filter(Boolean)
+        .map(m => String(m));
     }
-    return hostname;
-  }
 
-  _findByPrefix(hostname) {
-    if (typeof findByPrefix === 'function') return findByPrefix(hostname);
-
-    const h = hostname.toLowerCase();
-    if (this._prefixIndex.exact && this._prefixIndex.exact[h]) {
-      return { ids: this._prefixIndex.exact[h], method: 'exact', matched: h };
-    }
-    if (this._prefixIndex.suffix) {
-      for (const [suffix, ids] of Object.entries(this._prefixIndex.suffix)) {
-        if (h.endsWith('.' + suffix) || h === suffix) {
-          return { ids, method: 'suffix', matched: suffix };
-        }
-      }
-    }
-    if (this._prefixIndex.keyword) {
-      for (const [kw, ids] of Object.entries(this._prefixIndex.keyword)) {
-        if (h.includes(kw)) {
-          return { ids, method: 'keyword', matched: kw };
-        }
-      }
-    }
-    return null;
-  }
-
-  _saveUrlCache(force = false) {
-    if (!this._urlCache || typeof $prefs === 'undefined') return;
-
-    const now = Date.now();
-    if (!force && (now - this._persistMeta.lastPersistAt) < this._persistIntervalMs) return;
-
-    const entries = Object.entries(this._urlCache)
-      .filter(([, v]) => v && typeof v.ts === 'number' && (now - v.ts) < this._cacheTtlMs)
-      .sort((a, b) => b[1].ts - a[1].ts)
-      .slice(0, this._persistLimit);
-
-    try {
-      $prefs.setValueForKey(this._urlCacheKey, JSON.stringify(Object.fromEntries(entries)));
-      this._persistMeta.lastPersistAt = now;
-      $prefs.setValueForKey(this._urlMetaKey, JSON.stringify(this._persistMeta));
-    } catch (e) {}
-  }
-
-  _touchUrlCache(cacheKey, id) {
-    if (!this._urlCache) return;
-
-    const now = Date.now();
-    const prev = this._urlCache[cacheKey];
-    const changed = !prev || prev.id !== id;
-
-    this._urlCache[cacheKey] = { id, ts: now };
-    this._saveUrlCache(changed);
-  }
-
-  async load() {
-    Logger.debug('ManifestLoader', `Lazy load v${BUILTIN_MANIFEST?.version || '22.0.0'}`);
-    return this._createLazyProxy();
-  }
-
-  _createLazyProxy() {
-    const self = this;
-
-    return {
-      findMatch: (url) => {
-        const cacheKey = self._buildUrlCacheKey(url);
-        const pathname = self._extractPathFromCacheKey(cacheKey);
-
-        // QX 热路径优化：静态资源/API直接快速跳过
-        if (self._isFastSkipPath(pathname)) {
-          self._memoizedMatches.set(cacheKey, null);
-          return null;
-        }
-
-        // 本次运行内的热路径缓存（避免同URL重复匹配）
-        if (self._memoizedMatches.has(cacheKey)) {
-          return self._memoizedMatches.get(cacheKey);
-        }
-
-        if (self._urlCache) {
-          const cached = self._urlCache[cacheKey];
-          if (cached && (Date.now() - cached.ts) < self._cacheTtlMs) {
-            Logger.debug('ManifestLoader', `Cache hit: ${cached.id}`);
-            self._incrementStat('cacheHit');
-            self._touchUrlCache(cacheKey, cached.id);
-            self._memoizedMatches.set(cacheKey, cached.id);
-            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-              const firstKey = self._memoizedMatches.keys().next().value;
-              self._memoizedMatches.delete(firstKey);
-            }
-            return cached.id;
-          }
-        }
-        self._incrementStat('cacheMiss');
-
-        let candidates = [];
-        let hostname = self._extractHostnameFromCacheKey(cacheKey);
-
-        try {
-          if (!hostname) hostname = self._getHostname(url);
-          if (!hostname) throw new Error('Invalid URL');
-          const matchInfo = self._findByPrefix(hostname);
-
-          if (matchInfo) {
-            candidates = matchInfo.ids;
-            self._incrementStat(matchInfo.method);
-            Logger.debug('ManifestLoader', `Prefix ${matchInfo.method}: ${matchInfo.matched}`);
-          } else {
-            self._incrementStat('missPrefix');
-            const tokenCandidates = self._findByHostToken(hostname);
-            if (tokenCandidates.length > 0) {
-              candidates = tokenCandidates;
-              self._incrementStat('tokenNarrow');
-              Logger.debug('ManifestLoader', `Token narrow: ${hostname} -> ${tokenCandidates.length}`);
-            } else {
-              Logger.debug('ManifestLoader', 'MISS_PREFIX: no prefix/token match');
-            }
-          }
-        } catch (e) {
-          self._incrementStat('urlParseFail');
-          Logger.debug('ManifestLoader', 'URL_PARSE_FAIL: parse url failed');
-        }
-
-        if (candidates.length === 0) {
-          self._incrementStat('fallback');
-          candidates = Object.keys(self._lazyConfigs);
-          Logger.debug('ManifestLoader', `Fallback: scanning ${candidates.length} patterns`);
-        }
-
-        for (const id of candidates) {
-          let regex = self._regexCache.get(id);
-
-          if (!regex && self._lazyConfigs[id]) {
-            const patternStr = self._lazyConfigs[id].urlPattern;
-            if (!patternStr) continue;
-
-            try {
-              regex = new RegExp(patternStr);
-              self._regexCache.set(id, regex);
-            } catch (e) {
-              self._incrementStat('invalidPattern');
-              Logger.error('ManifestLoader', `INVALID_PATTERN: ${id}`);
-              continue;
-            }
-          }
-
-          if (regex && regex.test(url)) {
-            Logger.debug('ManifestLoader', `Matched: ${id} (${self._regexCache.size}/${candidates.length})`);
-            if (self._urlCache) self._touchUrlCache(cacheKey, id);
-            self._memoizedMatches.set(cacheKey, id);
-            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-              const firstKey = self._memoizedMatches.keys().next().value;
-              self._memoizedMatches.delete(firstKey);
-            }
-            return id;
-          }
-        }
-
-        self._incrementStat('missRegex');
-        Logger.warn('ManifestLoader', `MISS_REGEX: No match for ${url.substring(0, 40)}...`);
-        self._memoizedMatches.set(cacheKey, null);
-        if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-          const firstKey = self._memoizedMatches.keys().next().value;
-          self._memoizedMatches.delete(firstKey);
-        }
-        return null;
-      },
-
-      getConfigVersion: (configId) => (self._lazyConfigs[configId] ? '1.0' : null),
-      getStats: () => ({ ...self._stats }),
-      flushStats: () => self._flushStats(true)
-    };
+    return config;
   }
 }
 
+// CommonJS导出
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { SimpleManifestLoader };
+  module.exports = { SimpleConfigLoader };
 }
