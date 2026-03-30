@@ -1,0 +1,51 @@
+{
+  "urlPattern": "^https?:\\/\\/(?:www\\.)?55i6k1g3u0\\.shop\\/.*",
+  "name": "555电影去广告",
+  "mode": "html",
+  "htmlMarkers": [
+    "qiaozhixuexiao.com",
+    "shenglinyiyang.cn",
+    "twlrih.cn",
+    "googletagmanager.com",
+    "32256855.com",
+    "48023391.com",
+    "66321539.com",
+    "bh9492.cc",
+    "81680565.com",
+    "32480788.com",
+    "550375.vip"
+  ],
+  "htmlReplacements": [
+    {
+      "pattern": "<script[^>]*src=[\"'][^\"']*\\b(?:qiaozhixuexiao|shenglinyiyang|twlrih|googletagmanager)\\b[^\"']*[\"'][^>]*>\\s*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*data-encoded[^>]*>[^<]*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*>[^<]*countly[^<]*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*>[^<]*DF Analytics[^<]*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*>[^<]*gtag[^<]*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*>[^<]*Google tag[^<]*<\\/script>",
+      "replacement": ""
+    }
+  ],
+  "blockHosts": [
+    "qiaozhixuexiao.com",
+    "shenglinyiyang.cn",
+    "twlrih.cn",
+    "googletagmanager.com",
+    "google-analytics.com"
+  ]
+}
