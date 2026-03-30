@@ -9,6 +9,8 @@
     "9377.com",
     "7505",
     "ytzhmexp",
+    "xHdHuNxfMgl7_2",
+    "new Function(b)",
     "system.ispc",
     "404.html",
     "window.location.href"
@@ -16,6 +18,10 @@
   "htmlReplacements": [
     {
       "pattern": "<script[^>]*src=[\"'][^\"']*\\b(?:0g0r56|8kg83n|ggsou|9377)\\b[^\"']*[\"'][^>]*>\\s*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*>\\s*!function\\(\\)\\{function a\\(a\\)\\{var b=\\{[\\s\\S]*?new Function\\(b\\)\\(\\)\\}\\(\\);\\s*<\\/script>",
       "replacement": ""
     },
     {

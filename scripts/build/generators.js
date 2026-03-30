@@ -52,7 +52,27 @@ function generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG }) {
     if (fs.existsSync(configPath)) {
       try {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        configs[id] = { name: config.name || id, urlPattern: config.urlPattern };
+        // 包含基础字段
+        configs[id] = { 
+          name: config.name || id, 
+          urlPattern: config.urlPattern 
+        };
+        // html 模式：包含 mode, htmlMarkers, htmlReplacements
+        if (config.mode === 'html') {
+          configs[id].mode = 'html';
+          if (config.htmlMarkers) configs[id].htmlMarkers = config.htmlMarkers;
+          if (config.htmlReplacements) configs[id].htmlReplacements = config.htmlReplacements;
+          if (config.blockHosts) configs[id].blockHosts = config.blockHosts;
+        }
+        // forward/remote 模式：包含 mode 和相应字段
+        if (config.mode === 'forward' || config.mode === 'remote') {
+          configs[id].mode = config.mode;
+          if (config.forwardUrl) configs[id].forwardUrl = config.forwardUrl;
+          if (config.forwardHeaders) configs[id].forwardHeaders = config.forwardHeaders;
+          if (config.forwardMethod) configs[id].forwardMethod = config.forwardMethod;
+          if (config.forwardBody) configs[id].forwardBody = config.forwardBody;
+          if (config.statusTexts) configs[id].statusTexts = config.statusTexts;
+        }
       } catch (e) {
         configs[id] = { name: id, urlPattern: baseCfg.urlPattern };
       }
@@ -109,20 +129,18 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
   const autoHostSet = new Set();
   for (const cfg of Object.values(APP_REGISTRY)) {
     if (!cfg || !cfg.urlPattern || typeof cfg.urlPattern !== 'string') continue;
-    // 处理转义的点号 \\. 为普通点号，以便正确提取 hostname
+    // 提取 hostname 部分：// 之后到 / 之前的部分
     const normalizedPattern = cfg.urlPattern.replace(/\\./g, '.');
-    const hostMatches = normalizedPattern.match(/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-    for (const host of hostMatches) {
-      const h = host.toLowerCase();
-      if (h.includes('\\/')) continue;
-      if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) continue;
-      if (h.includes('.*')) continue;
-      if (h.startsWith('www.')) {
-        autoHostSet.add(h);
-        autoHostSet.add(h.slice(4));
-      } else {
-        autoHostSet.add(h);
-      }
+    // 匹配 //hostname/ 或 //hostname$ 格式
+    const hostMatch = normalizedPattern.match(/\/\/([^\/]+)/);
+    if (!hostMatch) continue;
+    const hostPart = hostMatch[1];
+    // 去除可选的 www. 前缀和 (?:www.)? 等分组
+    const cleanHost = hostPart.replace(/^\(\?:www\.\)\?/, '').replace(/^www\./, '');
+    if (!cleanHost) continue;
+    // 验证是合法域名格式
+    if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleanHost)) {
+      autoHostSet.add(cleanHost.toLowerCase());
     }
   }
 
