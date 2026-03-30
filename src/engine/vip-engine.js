@@ -306,6 +306,13 @@ class VipEngine {
   }
 
   _processJson(body, config) {
+    if (!body) return { body };
+
+    const firstChar = body[0];
+    if (firstChar !== '{' && firstChar !== '[') {
+      return { body };
+    }
+
     let obj = Utils.safeJsonParse(body);
     if (!obj) return { body };
 
@@ -364,8 +371,17 @@ class VipEngine {
   }
 
   _processHtml(body, config) {
-    let modified = body;
     const replacements = config._htmlReplacements || config.htmlReplacements || [];
+    if (!replacements.length) return { body };
+
+    let modified = body;
+
+    // 快速短路：规则都无关键字时直接返回，减少 replace 循环
+    const markers = config._htmlMarkers || config.htmlMarkers || null;
+    if (Array.isArray(markers) && markers.length > 0) {
+      const hit = markers.some(m => m && modified.indexOf(m) >= 0);
+      if (!hit) return { body: modified };
+    }
 
     for (const rule of replacements) {
       try {
