@@ -1,0 +1,29 @@
+{
+  "urlPattern": "^https?:\\/\\/(?:www\\.)?juyeye\\.cc\\/.*",
+  "name": "剧爷爷去广告",
+  "mode": "html",
+  "htmlMarkers": [
+    "0g0r56.com",
+    "8kg83n.com",
+    "ggsou.com",
+    "9377.com",
+    "7505",
+    "ytzhmexp"
+  ],
+  "htmlReplacements": [
+    {
+      "pattern": "<script[^>]*src=[\"'][^\"']*\\b(?:0g0r56|8kg83n|ggsou|9377)\\b[^\"']*[\"'][^>]*>\\s*<\\/script>",
+      "replacement": ""
+    },
+    {
+      "pattern": "<script[^>]*>[\\s\\S]*?system\\.ispc[\\s\\S]*?404\\.html[\\s\\S]*?<\\/script>",
+      "replacement": ""
+    }
+  ],
+  "blockHosts": [
+    "0g0r56.com",
+    "8kg83n.com",
+    "ggsou.com",
+    "9377.com"
+  ]
+}
