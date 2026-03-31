@@ -3,52 +3,25 @@
   "name": "555电影去广告",
   "mode": "html",
   "priority": 30,
-  "description": "555电影网页去广告",
+  "description": "555电影网页去广告 - 精确模式",
   "htmlMarkers": [
-    "3d-platform-pro.obs.cn-south-1.myhuaweicloud.com",
-    "hljbrsn1gj.qiaozhixuexiao.com",
-    "ajgvkj1jsv.shenglinyiyang.cn",
-    "ingest.twlrih.cn",
-    "48023391.com",
-    "66321539.com",
-    "81680565.com",
-    "32256855.com",
-    "32480788.com",
-    "55kp1.com",
-    "5dd10.com",
-    "ewdegdwjnfedfdldtk12377.cn",
-    "04165573.com",
-    "shenglinyiyang.cn",
-    "qiaozhixuexiao.com",
-    "550375.vip",
-    "iYmIuMjZyeS5",
-    "system.ispc",
-    "404.html",
-    "window.location.href"
+    "small-icon-container",
+    "data-encoded",
+    "d693d6351"
   ],
   "htmlReplacements": [
     {
-      "pattern": "<script[^>]*src=[\"'][^\"']*(?:3d-platform-pro\\.obs\\.cn-south-1\\.myhuaweicloud|hljbrsn1gj\\.qiaozhixuexiao|ajgvkj1jsv\\.shenglinyiyang|ingest\\.twlrih)\\.[^\"']*[\"'][^>]*>\\s*<\\/script>",
+      "pattern": "<div[^>]*class=[\"'][^\"']*small-icon-container[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/div>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<script[^>]*>[\\s\\S]*?(?:system\\.ispc|404\\.html|window\\.location\\.href)[\\s\\S]*?<\\/script>",
+      "pattern": "<script[^>]*data-encoded[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     },
     {
-      "pattern": "<script[^>]*src=[\"']https?:\\/\\/(?:48023391|66321539|81680565|32256855|32480788|55kp1|5dd10|550375)\\.[^\"']*[\"'][^>]*>\\s*<\\/script>",
-      "replacement": "",
-      "flags": "gi"
-    },
-    {
-      "pattern": "<script[^>]*id=\"iYmIuMjZyeS5\"[^>]*>\\s*<\\/script>",
-      "replacement": "",
-      "flags": "gi"
-    },
-    {
-      "pattern": "<script[^>]*data-encoded[^>]*>[\\s\\S]*?<\\/script>",
+      "pattern": "<script[^>]*id=[\"']d693d6351[\"'][^>]*>[\\s\\S]*?<\\/script>",
       "replacement": "",
       "flags": "gi"
     }
