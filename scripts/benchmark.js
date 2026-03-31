@@ -10,9 +10,7 @@ global.RegexPool = RegexPool;
 
 global.CONFIG = { MAX_PROCESSORS_PER_REQUEST: 1000 };
 
-global.Platform = { isQX: true, isLoon: false, isSurge: false, isStash: false };
 global.$notify = () => {};
-global.$notification = { post: () => {} };
 
 function bench(name, fn, rounds = 5) {
   const times = [];

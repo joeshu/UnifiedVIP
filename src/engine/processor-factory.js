@@ -2,19 +2,8 @@
 // 处理器工厂 - 创建各类处理器
 
 function sendNotify(title, subtitle, message, options) {
-  if (typeof Platform === 'undefined') return;
-  if (Platform.isQX && typeof $notify !== 'undefined') {
+  if (typeof $notify !== 'undefined') {
     $notify(title, subtitle, message, options || {});
-    return;
-  }
-  if (Platform.isLoon && typeof $notification !== 'undefined') {
-    const url = options && options['open-url'];
-    return url
-      ? $notification.post(title, subtitle, message, url)
-      : $notification.post(title, subtitle, message);
-  }
-  if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
-    $notification.post(title, subtitle, message, options || {});
   }
 }
 

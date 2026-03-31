@@ -8,9 +8,6 @@ class Environment {
   constructor(name) {
     this.name = name;
     this.isQX = true;
-    this.isSurge = false;
-    this.isLoon = false;
-    this.isStash = false;
 
     this.response = (typeof $response !== 'undefined') ? $response : {};
     this.request = (typeof $request !== 'undefined') ? $request : {};

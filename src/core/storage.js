@@ -49,7 +49,7 @@ const Storage = (() => {
       };
 
       let str = JSON.stringify(all);
-      const maxSize = typeof Platform !== 'undefined' && Platform.isQX ? 500000 : Infinity;
+      const maxSize = 500000;
 
       // M3: 超限保护，保留最近3个
       if (str.length > maxSize) {

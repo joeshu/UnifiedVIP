@@ -3,10 +3,6 @@
 
 const Platform = {
   isQX: true,
-  isLoon: false,
-  isSurge: false,
-  isStash: false,
-
   getName() {
     return 'QX';
   }

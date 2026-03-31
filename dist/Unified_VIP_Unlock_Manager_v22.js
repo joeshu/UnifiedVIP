@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-31T12:49:26.652Z
+ * 构建时间: 2026-03-31T13:03:15.341Z
  * APP数量: 23
  * ==========================================
  *
@@ -148,10 +148,6 @@ function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.e
 
 const Platform = {
   isQX: true,
-  isLoon: false,
-  isSurge: false,
-  isStash: false,
-
   getName() {
     return 'QX';
   }
@@ -217,7 +213,7 @@ const Storage = (() => {
       };
 
       let str = JSON.stringify(all);
-      const maxSize = typeof Platform !== 'undefined' && Platform.isQX ? 500000 : Infinity;
+      const maxSize = 500000;
 
       if (str.length > maxSize) {
         const sorted = Object.entries(all)
@@ -455,19 +451,8 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 function sendNotify(title, subtitle, message, options) {
-  if (typeof Platform === 'undefined') return;
-  if (Platform.isQX && typeof $notify !== 'undefined') {
+  if (typeof $notify !== 'undefined') {
     $notify(title, subtitle, message, options || {});
-    return;
-  }
-  if (Platform.isLoon && typeof $notification !== 'undefined') {
-    const url = options && options['open-url'];
-    return url
-      ? $notification.post(title, subtitle, message, url)
-      : $notification.post(title, subtitle, message);
-  }
-  if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
-    $notification.post(title, subtitle, message, options || {});
   }
 }
 
@@ -1001,9 +986,6 @@ class Environment {
   constructor(name) {
     this.name = name;
     this.isQX = true;
-    this.isSurge = false;
-    this.isLoon = false;
-    this.isStash = false;
 
     this.response = (typeof $response !== 'undefined') ? $response : {};
     this.request = (typeof $request !== 'undefined') ? $request : {};
