@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-31T13:03:15.341Z
+ * 构建时间: 2026-03-31T13:22:44.578Z
  * APP数量: 23
  * ==========================================
  *
@@ -145,13 +145,6 @@ const PREFIX_INDEX = {
 };
 const PREFIX_KEYWORDS=[["kouyuxingqiu",["kyxq"]],["banxueketang",["bxkt"]],["iotpservice",["wohome"]],["picturebook",["ipalfish"]],["theater-api",["sylangyue"]],["folidaymall",["foday"]],["tophubdata",["tophub"]],["mandrillvr",["bqwz"]],["qiujingapp",["qiujingapp"]],["iappdaily",["iappdaily"]],["sylangyue",["sylangyue"]],["yizhilive",["qiujingapp"]],["yz250907",["tv"]],["gotokeep",["keep"]],["lifeweek",["slzd"]],["haotgame",["qmjyzc"]],["smartont",["wohome"]],["ipalfish",["ipalfish"]],["mingcalc",["mingcalc"]],["fluxapi",["vvebo"]],["javelin",["bqwz"]],["gpstool",["gps"]],["qiujing",["qiujingapp"]],["yz1018",["tv"]],["yz0320",["tv"]],["nuocha",["keep"]],["gerudo",["keep"]],["athena",["keep"]],["tophub",["tophub"]],["idaily",["tophub"]],["jvplay",["xjsm"]],["qmjyzc",["qmjyzc"]],["wohome",["wohome"]],["zhenti",["zhenti"]],["cfvip",["tv"]],["remai",["tophub"]],["vvebo",["vvebo"]],["cyljy",["cyljy"]],["feigo",["cyljy"]],["foday",["foday"]],["keep",["keep"]],["v2ex",["v2ex"]],["slzd",["slzd"]],["kyxq",["kyxq"]],["mhlz",["mhlz"]],["xjsm",["xjsm"]],["bqwz",["bqwz"]],["bxkt",["bxkt"]],["kada",["kada"]],["hhdd",["kada"]],["iapp",["iappdaily"]],["yzy",["tv"]],["qmj",["qmjyzc"]],["gps",["gps"]],["jsq",["mingcalc"]],["yz",["tv"]],["cf",["tv"]]];
 function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};for(const[kw,ids]of PREFIX_KEYWORDS)if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}
-
-const Platform = {
-  isQX: true,
-  getName() {
-    return 'QX';
-  }
-};
 
 function _log(level, tag, msg) {
   if (typeof CONFIG === 'undefined' || !CONFIG.DEBUG) return;
