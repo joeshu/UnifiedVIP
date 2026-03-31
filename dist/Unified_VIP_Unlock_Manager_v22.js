@@ -1,8 +1,8 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-31T13:22:44.578Z
- * APP数量: 23
+ * 构建时间: 2026-03-31T23:45:06.406Z
+ * APP数量: 24
  * ==========================================
  *
  * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
@@ -33,7 +33,7 @@ const CONFIG = {
 
 const META = { name: 'UnifiedVIP', version: '22.0.0' };
 
-const BUILTIN_MANIFEST = {"version":"22.0.0-d14be627","updated":"2026-03-31","total":23,"configs":{"555dy":{"name":"555电影去广告","urlPattern":"^https?:\\/\\/(?:www\\.)?55[a-z0-9]+\\.shop\\/.*","mode":"html"},"bqwz":{"name":"标枪王者","urlPattern":"^https?:\\/\\/javelin\\.mandrillvr\\.com\\/api\\/data\\/get_game_data","mode":"game"},"bxkt":{"name":"伴学课堂","urlPattern":"^https?:\\/\\/api\\.banxueketang\\.com\\/api\\/classpal\\/app\\/v1","mode":"hybrid"},"cyljy":{"name":"成语来解压","urlPattern":"^https?:\\/\\/yr-game-api\\.feigo\\.fun\\/api\\/user\\/get-game-user-value","mode":"game"},"foday":{"name":"复游会","urlPattern":"^https?:\\/\\/apis\\.folidaymall\\.com\\/online\\/capi\\/component\\/getPageComponents","mode":"json"},"gps":{"name":"GPS工具箱","urlPattern":"^https:\\/\\/service\\.gpstool\\.com\\/app\\/index\\/getUserInfo","mode":"json"},"iappdaily":{"name":"iAppDaily","urlPattern":"^https:\\/\\/api\\.iappdaily\\.com\\/my\\/balance","mode":"json"},"juyeye":{"name":"剧爷爷去广告","urlPattern":"^https?:\\/\\/(?:www\\.)?juyeye\\.cc\\/.*","mode":"html"},"kada":{"name":"KaDa 阅读 VIP Unlock","urlPattern":"^https://service\\.hhdd\\.com/book2","mode":"json"},"keep":{"name":"Keep","urlPattern":"^https?:\\/\\/(?:api|kit)\\.gotokeep\\.com\\/(?:nuocha|gerudo|athena|nuocha\\/plans|suit\\/v5\\/smart|kprime\\/v4\\/suit\\/sales)\\/","mode":"regex"},"kyxq":{"name":"口语星球","urlPattern":"^https?:\\/\\/mapi\\.kouyuxingqiu\\.com\\/api\\/v2","mode":"json"},"mhlz":{"name":"魔幻粒子","urlPattern":"^https?:\\/\\/ss\\.landintheair\\.com\\/storage\\/","mode":"json"},"mingcalc":{"name":"明计算","urlPattern":"^https?://jsq\\.mingcalc\\.cn/XMGetMeCount\\.ashx","mode":"json"},"qiujingapp":{"name":"球竞APP","urlPattern":"^https?:\\/\\/gateway-api\\.yizhilive\\.com\\/api\\/(?:v2\\/index\\/carouses\\/(?:3|6|8|11)|v3\\/index\\/all)","mode":"json"},"qmjyzc":{"name":"全民解压找茬","urlPattern":"^https?://res5\\.haotgame\\.com/cu03/static/OpenDoors/Res/data/levels/\\d+\\.json","mode":"json"},"sylangyue":{"name":"思朗月影视","urlPattern":"^https?:\\/\\/theater-api\\.sylangyue\\.xyz\\/api\\/user\\/info","mode":"json"},"tophub":{"name":"TopHub","urlPattern":"^https:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync","mode":"json"},"tv":{"name":"影视去广告","urlPattern":"^https?:\\/\\/(?:yzy0916|yz1018|yz250907|yz0320|cfvip)\\..+\\.com\\/(?:v2|v1)\\/api\\/(?:basic\\/init|home\\/firstScreen|adInfo\\/getPageAd|home\\/body)","mode":"json"},"v2ex":{"name":"V2EX去广告","urlPattern":"^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).*$","mode":"html"},"vvebo":{"name":"Vvebo Subscription Forward","urlPattern":"^https:\\/\\/fluxapi\\.vvebo\\.vip\\/v1\\/purchase\\/iap\\/subscription","mode":"forward"},"wohome":{"name":"联通智家","urlPattern":"^https:\\/\\/iotpservice\\.smartont\\.net\\/wohome\\/dispatcher","mode":"json"},"xjsm":{"name":"星际使命","urlPattern":"^https?:\\/\\/star\\.jvplay\\.cn\\/v2\\/storage","mode":"json"},"zhenti":{"name":"真题伴侣","urlPattern":"^https?://newtest\\.zoooy111\\.com/mobilev4\\.php/User/index","mode":"json"}}};
+const BUILTIN_MANIFEST = {"version":"22.0.0-612796dc","updated":"2026-03-31","total":24,"configs":{"555dy":{"name":"555电影去广告","urlPattern":"^https?:\\/\\/(?:www\\.)?55[a-z0-9]+\\.shop\\/.*","mode":"html"},"bqwz":{"name":"标枪王者","urlPattern":"^https?:\\/\\/javelin\\.mandrillvr\\.com\\/api\\/data\\/get_game_data","mode":"game"},"bxkt":{"name":"伴学课堂","urlPattern":"^https?:\\/\\/api\\.banxueketang\\.com\\/api\\/classpal\\/app\\/v1","mode":"hybrid"},"cyljy":{"name":"成语来解压","urlPattern":"^https?:\\/\\/yr-game-api\\.feigo\\.fun\\/api\\/user\\/get-game-user-value","mode":"game"},"foday":{"name":"复游会","urlPattern":"^https?:\\/\\/apis\\.folidaymall\\.com\\/online\\/capi\\/component\\/getPageComponents","mode":"json"},"gps":{"name":"GPS工具箱","urlPattern":"^https:\\/\\/service\\.gpstool\\.com\\/app\\/index\\/getUserInfo","mode":"json"},"iappdaily":{"name":"iAppDaily","urlPattern":"^https:\\/\\/api\\.iappdaily\\.com\\/my\\/balance","mode":"json"},"juyeye":{"name":"剧爷爷去广告","urlPattern":"^https?:\\/\\/(?:www\\.)?juyeye\\.cc\\/.*","mode":"html"},"kada":{"name":"KaDa 阅读 VIP Unlock","urlPattern":"^https://service\\.hhdd\\.com/book2","mode":"json"},"keep":{"name":"Keep","urlPattern":"^https?:\\/\\/(?:api|kit)\\.gotokeep\\.com\\/(?:nuocha|gerudo|athena|nuocha\\/plans|suit\\/v5\\/smart|kprime\\/v4\\/suit\\/sales)\\/","mode":"regex"},"kyxq":{"name":"口语星球","urlPattern":"^https?:\\/\\/mapi\\.kouyuxingqiu\\.com\\/api\\/v2","mode":"json"},"mhlz":{"name":"魔幻粒子","urlPattern":"^https?:\\/\\/ss\\.landintheair\\.com\\/storage\\/","mode":"json"},"mingcalc":{"name":"明计算","urlPattern":"^https?://jsq\\.mingcalc\\.cn/XMGetMeCount\\.ashx","mode":"json"},"qiujingapp":{"name":"球竞APP","urlPattern":"^https?:\\/\\/gateway-api\\.yizhilive\\.com\\/api\\/(?:v2\\/index\\/carouses\\/(?:3|6|8|11)|v3\\/index\\/all)","mode":"json"},"qmjyzc":{"name":"全民解压找茬","urlPattern":"^https?://res5\\.haotgame\\.com/cu03/static/OpenDoors/Res/data/levels/\\d+\\.json","mode":"json"},"sylangyue":{"name":"思朗月影视","urlPattern":"^https?:\\/\\/theater-api\\.sylangyue\\.xyz\\/api\\/user\\/info","mode":"json"},"tophub":{"name":"TopHub","urlPattern":"^https:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync","mode":"json"},"tv":{"name":"影视去广告","urlPattern":"^https?:\\/\\/(?:yzy0916|yz1018|yz250907|yz0320|cfvip)\\..+\\.com\\/(?:v2|v1)\\/api\\/(?:basic\\/init|home\\/firstScreen|adInfo\\/getPageAd|home\\/body)","mode":"json"},"v2ex":{"name":"V2EX去广告","urlPattern":"^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).*$","mode":"html"},"vvebo":{"name":"Vvebo Subscription Forward","urlPattern":"^https:\\/\\/fluxapi\\.vvebo\\.vip\\/v1\\/purchase\\/iap\\/subscription","mode":"forward"},"wohome":{"name":"联通智家","urlPattern":"^https:\\/\\/iotpservice\\.smartont\\.net\\/wohome\\/dispatcher","mode":"json"},"xjsm":{"name":"星际使命","urlPattern":"^https?:\\/\\/star\\.jvplay\\.cn\\/v2\\/storage","mode":"json"},"xmbd":{"name":"消灭病毒","urlPattern":"^https?:\\/\\/wx-bingdu\\.lanfeitech\\.com\\/api\\/archive\\/get","mode":"regex"},"zhenti":{"name":"真题伴侣","urlPattern":"^https?://newtest\\.zoooy111\\.com/mobilev4\\.php/User/index","mode":"json"}}};
 
 const PREFIX_INDEX = {
  exact: {
@@ -53,6 +53,7 @@ const PREFIX_INDEX = {
   'fluxapi.vvebo.vip': ["vvebo"],
   'iotpservice.smartont.net': ["wohome"],
   'star.jvplay.cn': ["xjsm"],
+  'wx-bingdu.lanfeitech.com': ["xmbd"],
   'newtest.zoooy111.com': ["zhenti"]
  },
  suffix: {
@@ -81,6 +82,7 @@ const PREFIX_INDEX = {
   'vvebo.vip': ["vvebo"],
   'smartont.net': ["wohome"],
   'jvplay.cn': ["xjsm"],
+  'lanfeitech.com': ["xmbd"],
   'zoooy111.com': ["zhenti"]
  },
  keyword: {
@@ -1284,24 +1286,42 @@ class VipEngine {
   }
 
   _processHtml(body, config) {
-    const replacements = config._htmlReplacements || config.htmlReplacements || [];
-    if (!replacements.length) return { body };
+    const rid = this._requestId;
+    Logger.debug('Html', `${rid}|config=${config.name || 'unknown'}, markers=${(config.htmlMarkers || []).length}, replacements=${(config.htmlReplacements || []).length}`);
+
+    const replacements = config._htmlReplacements || config.htmlMarkers || [];
+    if (!replacements.length) {
+      Logger.debug('Html', `${rid}|no replacements, skip`);
+      return { body };
+    }
 
     let modified = body;
 
     const markers = config._htmlMarkers || config.htmlMarkers || null;
     if (Array.isArray(markers) && markers.length > 0) {
-      const hit = markers.some(m => m && modified.indexOf(m) >= 0);
-      if (!hit) return { body: modified };
+      const hitMarkers = markers.filter(m => m && modified.indexOf(m) >= 0);
+      Logger.debug('Html', `${rid}|markers total=${markers.length}, hit=${hitMarkers.length}, hitList=[${hitMarkers.join(',')}]`);
+      if (hitMarkers.length === 0) {
+        Logger.debug('Html', `${rid}|no marker hit, return original`);
+        return { body: modified };
+      }
     }
 
     for (const rule of replacements) {
       try {
         const regex = rule.pattern instanceof RegExp ? rule.pattern : RegexPool.get(rule.pattern, rule.flags || 'gi');
+        const beforeLen = modified.length;
         modified = modified.replace(regex, rule.replacement);
-      } catch (e) {}
+        const afterLen = modified.length;
+        if (beforeLen !== afterLen) {
+          Logger.debug('Html', `${rid}|replacement applied, len ${beforeLen}->${afterLen}, pattern=${rule.pattern.toString().substring(0,40)}`);
+        }
+      } catch (e) {
+        Logger.debug('Html', `${rid}|replacement error: ${e.message}`);
+      }
     }
 
+    Logger.debug('Html', `${rid}|done, modified=${modified.length !== body.length}`);
     return { body: modified };
   }
 }

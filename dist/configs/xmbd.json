@@ -1,0 +1,19 @@
+{
+  "urlPattern": "^https?:\\/\\/wx-bingdu\\.lanfeitech\\.com\\/api\\/archive\\/get",
+  "id": "xmbd",
+  "name": "消灭病毒",
+  "mode": "regex",
+  "description": "消灭病毒 App 内购/资源修改",
+  "regexReplacements": [
+    {
+      "pattern": "\"money\":\"[^\"]*\"",
+      "replacement": "\"money\":\"9999999999999\"",
+      "flags": "g"
+    },
+    {
+      "pattern": "\"zuanShi\":\\d+",
+      "replacement": "\"zuanShi\":9999",
+      "flags": "g"
+    }
+  ]
+}
