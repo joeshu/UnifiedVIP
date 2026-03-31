@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-31T06:44:22.564Z
+ * 构建时间: 2026-03-31T09:24:29.784Z
  * APP数量: 23
  * ==========================================
  *
@@ -345,7 +345,31 @@ const HTTP = (() => {
 // 7. 工具函数
 // ==========================================
 // src/core/utils.js
-// 工具函数集 - 完整版
+// 工具函数集 - 路径预编译优化版
+
+const __pathTokenCache = new Map();
+const __maxPathTokenCacheSize = 300;
+
+function _tokenizePath(path) {
+  if (!path || typeof path !== 'string') return [];
+  const hit = __pathTokenCache.get(path);
+  if (hit) return hit;
+
+  const tokens = path.split('.').map(part => {
+    const m = part.match(/^([^\[\]]+)\[(\d+)\]$/);
+    if (m) {
+      return { key: m[1], isArray: true, index: parseInt(m[2], 10) };
+    }
+    return { key: part, isArray: false, index: -1 };
+  });
+
+  if (__pathTokenCache.size >= __maxPathTokenCacheSize) {
+    const firstKey = __pathTokenCache.keys().next().value;
+    __pathTokenCache.delete(firstKey);
+  }
+  __pathTokenCache.set(path, tokens);
+  return tokens;
+}
 
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
@@ -356,47 +380,56 @@ const Utils = {
     try { return JSON.stringify(obj); } catch (e) { return '{}'; }
   },
 
-  getPath: (obj, path) => {
-    if (!path || !obj) return undefined;
-    const parts = path.split('.');
+  compilePath: (path) => _tokenizePath(path),
+
+  getPath: (obj, pathOrTokens) => {
+    if (!obj || !pathOrTokens) return undefined;
+    const tokens = Array.isArray(pathOrTokens) ? pathOrTokens : _tokenizePath(pathOrTokens);
     let current = obj;
-    for (const part of parts) {
+
+    for (const token of tokens) {
       if (current == null) return undefined;
-      const match = part.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
-      if (match) {
-        current = current[match[1]] && current[match[1]][parseInt(match[2])];
+      if (token.isArray) {
+        const arr = current[token.key];
+        current = arr && arr[token.index];
       } else {
-        current = current[part];
+        current = current[token.key];
       }
     }
     return current;
   },
 
-  setPath: (obj, path, value) => {
-    if (!path || !obj) return obj;
-    const parts = path.split('.');
-    let current = obj;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      const next = parts[i + 1];
-      const match = part.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
-      const isNextArray = /^\\[.*\\]$/.test(next);
+  setPath: (obj, pathOrTokens, value) => {
+    if (!obj || !pathOrTokens) return obj;
+    const tokens = Array.isArray(pathOrTokens) ? pathOrTokens : _tokenizePath(pathOrTokens);
+    if (!tokens.length) return obj;
 
-      if (match) {
-        const arr = current[match[1]] || (current[match[1]] = []);
-        current = arr[parseInt(match[2])] || (arr[parseInt(match[2])] = isNextArray ? [] : {});
+    let current = obj;
+
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const token = tokens[i];
+      const next = tokens[i + 1];
+
+      if (token.isArray) {
+        const arr = current[token.key] || (current[token.key] = []);
+        if (arr[token.index] == null) {
+          arr[token.index] = next && next.isArray ? [] : {};
+        }
+        current = arr[token.index];
       } else {
-        current = current[part] || (current[part] = isNextArray ? [] : {});
+        if (current[token.key] == null) {
+          current[token.key] = next && next.isArray ? [] : {};
+        }
+        current = current[token.key];
       }
     }
 
-    const last = parts[parts.length - 1];
-    const lastMatch = last.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
-    if (lastMatch) {
-      const arr = current[lastMatch[1]] || (current[lastMatch[1]] = []);
-      arr[parseInt(lastMatch[2])] = value;
+    const last = tokens[tokens.length - 1];
+    if (last.isArray) {
+      const arr = current[last.key] || (current[last.key] = []);
+      arr[last.index] = value;
     } else {
-      current[last] = value;
+      current[last.key] = value;
     }
     return obj;
   },
@@ -474,47 +507,69 @@ if (typeof module !== 'undefined' && module.exports) {
 
 function createProcessorFactory(requestId) {
   return {
-    setFields: (params) => (obj, env) => {
+    setFields: (params) => {
       const fields = params.fields || {};
-      for (const path in fields) {
-        let value = fields[path];
-        if (typeof value === 'string' && value.includes('{{')) {
-          value = Utils.resolveTemplate(value, obj);
-        }
-        Utils.setPath(obj, path, value);
-      }
-      return obj;
-    },
+      const compiled = Object.entries(fields).map(([path, value]) => ({
+        tokens: Utils.compilePath(path),
+        value
+      }));
 
-    mapArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (!Array.isArray(arr)) return obj;
-      const fields = params.fields || {};
-      for (const item of arr) {
-        if (!item) continue;
-        for (const path in fields) {
-          let value = fields[path];
+      return (obj, env) => {
+        for (const item of compiled) {
+          let value = item.value;
           if (typeof value === 'string' && value.includes('{{')) {
-            value = Utils.resolveTemplate(value, item);
+            value = Utils.resolveTemplate(value, obj);
           }
-          Utils.setPath(item, path, value);
+          Utils.setPath(obj, item.tokens, value);
         }
-      }
-      return obj;
+        return obj;
+      };
     },
 
-    filterArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (!Array.isArray(arr)) return obj;
+    mapArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      const fields = params.fields || {};
+      const compiled = Object.entries(fields).map(([path, value]) => ({
+        tokens: Utils.compilePath(path),
+        value
+      }));
+
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (!Array.isArray(arr)) return obj;
+
+        for (const itemObj of arr) {
+          if (!itemObj) continue;
+          for (const item of compiled) {
+            let value = item.value;
+            if (typeof value === 'string' && value.includes('{{')) {
+              value = Utils.resolveTemplate(value, itemObj);
+            }
+            Utils.setPath(itemObj, item.tokens, value);
+          }
+        }
+        return obj;
+      };
+    },
+
+    filterArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
       const excludeSet = new Set(params.excludeKeys || []);
-      Utils.setPath(obj, params.path, arr.filter(item => !excludeSet.has(item && item[params.keyField])));
-      return obj;
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (!Array.isArray(arr)) return obj;
+        Utils.setPath(obj, arrPathTokens, arr.filter(item => !excludeSet.has(item && item[params.keyField])));
+        return obj;
+      };
     },
 
-    clearArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (Array.isArray(arr)) arr.length = 0;
-      return obj;
+    clearArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (Array.isArray(arr)) arr.length = 0;
+        return obj;
+      };
     },
 
     deleteFields: (params) => (obj, env) => {
@@ -550,97 +605,114 @@ function createProcessorFactory(requestId) {
       return obj;
     },
 
-    sliceArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (Array.isArray(arr) && arr.length > params.keepCount) {
-        Utils.setPath(obj, params.path, arr.slice(0, params.keepCount));
-      }
-      return obj;
+    sliceArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (Array.isArray(arr) && arr.length > params.keepCount) {
+          Utils.setPath(obj, arrPathTokens, arr.slice(0, params.keepCount));
+        }
+        return obj;
+      };
     },
 
-    shiftArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (Array.isArray(arr) && arr.length > 0) arr.shift();
-      return obj;
+    shiftArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (Array.isArray(arr) && arr.length > 0) arr.shift();
+        return obj;
+      };
     },
 
-    processByKeyPrefix: (params) => (obj, env) => {
-      const target = Utils.getPath(obj, params.objPath);
-      if (!target || typeof target !== 'object') return obj;
+    processByKeyPrefix: (params) => {
+      const objPathTokens = Utils.compilePath(params.objPath);
       const rules = Object.entries(params.prefixRules || {});
-      for (const key in target) {
-        const value = target[key];
-        if (!value || typeof value !== 'object') continue;
-        for (const [prefix, handler] of rules) {
-          if (prefix !== '*' && key.startsWith(prefix)) {
-            Object.assign(value, handler);
-            break;
-          }
-          if (prefix === '*') {
-            Object.assign(value, handler);
-            break;
+
+      return (obj, env) => {
+        const target = Utils.getPath(obj, objPathTokens);
+        if (!target || typeof target !== 'object') return obj;
+
+        for (const key in target) {
+          const value = target[key];
+          if (!value || typeof value !== 'object') continue;
+          for (const [prefix, handler] of rules) {
+            if (prefix !== '*' && key.startsWith(prefix)) {
+              Object.assign(value, handler);
+              break;
+            }
+            if (prefix === '*') {
+              Object.assign(value, handler);
+              break;
+            }
           }
         }
-      }
-      return obj;
+        return obj;
+      };
     },
 
-    notify: (params) => (obj, env) => {
+    notify: (params) => {
       const title = params.title || 'UnifiedVIP';
-      let subtitle = params.subtitle || '';
-      let message = params.message || '';
+      const subtitleFieldTokens = params.subtitleField ? Utils.compilePath(params.subtitleField) : null;
+      const messageFieldTokens = params.messageField ? Utils.compilePath(params.messageField) : null;
+      const markFieldTokens = params.markField ? Utils.compilePath(params.markField) : null;
 
-      if (params.subtitleField) {
-        subtitle = Utils.getPath(obj, params.subtitleField) || subtitle;
-      }
+      return (obj, env) => {
+        let subtitle = params.subtitle || '';
+        let message = params.message || '';
 
-      // template 优先
-      if (params.template) {
-        message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-          return Utils.getPath(obj, key) || match;
-        });
-      } else if (params.messageField) {
-        // 使用 formatObject 处理对象
-        const fieldData = Utils.getPath(obj, params.messageField);
-        if (fieldData) {
-          if (typeof fieldData === 'object') {
-            message = Utils.formatObject(fieldData, params.separator || '\n');
-          } else {
-            message = String(fieldData);
+        if (subtitleFieldTokens) {
+          subtitle = Utils.getPath(obj, subtitleFieldTokens) || subtitle;
+        }
+
+        // template 优先
+        if (params.template) {
+          message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+            return Utils.getPath(obj, key) || match;
+          });
+        } else if (messageFieldTokens) {
+          // 使用 formatObject 处理对象
+          const fieldData = Utils.getPath(obj, messageFieldTokens);
+          if (fieldData) {
+            if (typeof fieldData === 'object') {
+              message = Utils.formatObject(fieldData, params.separator || '\n');
+            } else {
+              message = String(fieldData);
+            }
           }
         }
-      }
 
-      if (params.prefix) {
-        message = params.prefix + message;
-      }
-
-      const maxLen = params.maxLength || 500;
-      if (message.length > maxLen) {
-        message = message.substring(0, maxLen) + '...';
-      }
-
-      // 平台适配通知
-      if (typeof Platform !== 'undefined') {
-        if (Platform.isQX && typeof $notify !== 'undefined') {
-          $notify(title, subtitle, message, params.options || {});
-        } else if (Platform.isLoon && typeof $notification !== 'undefined') {
-          const url = params.options && params.options['open-url'];
-          if (url) {
-            $notification.post(title, subtitle, message, url);
-          } else {
-            $notification.post(title, subtitle, message);
-          }
-        } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
-          $notification.post(title, subtitle, message, params.options || {});
+        if (params.prefix) {
+          message = params.prefix + message;
         }
-      }
 
-      if (params.markField) {
-        Utils.setPath(obj, params.markField, true);
-      }
+        const maxLen = params.maxLength || 500;
+        if (message.length > maxLen) {
+          message = message.substring(0, maxLen) + '...';
+        }
 
-      return obj;
+        // 平台适配通知
+        if (typeof Platform !== 'undefined') {
+          if (Platform.isQX && typeof $notify !== 'undefined') {
+            $notify(title, subtitle, message, params.options || {});
+          } else if (Platform.isLoon && typeof $notification !== 'undefined') {
+            const url = params.options && params.options['open-url'];
+            if (url) {
+              $notification.post(title, subtitle, message, url);
+            } else {
+              $notification.post(title, subtitle, message);
+            }
+          } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
+            $notification.post(title, subtitle, message, params.options || {});
+          }
+        }
+
+        if (markFieldTokens) {
+          Utils.setPath(obj, markFieldTokens, true);
+        }
+
+        return obj;
+      };
     },
 
     compose: (params, compile) => {
@@ -902,7 +974,7 @@ class SimpleConfigLoader {
     }
 
     // 远程加载
-    const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json?t=${Date.now()}`;
+    const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json`;
 
     Logger.info('ConfigLoader', `${configId} fetching...`);
 

@@ -3,47 +3,69 @@
 
 function createProcessorFactory(requestId) {
   return {
-    setFields: (params) => (obj, env) => {
+    setFields: (params) => {
       const fields = params.fields || {};
-      for (const path in fields) {
-        let value = fields[path];
-        if (typeof value === 'string' && value.includes('{{')) {
-          value = Utils.resolveTemplate(value, obj);
-        }
-        Utils.setPath(obj, path, value);
-      }
-      return obj;
-    },
+      const compiled = Object.entries(fields).map(([path, value]) => ({
+        tokens: Utils.compilePath(path),
+        value
+      }));
 
-    mapArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (!Array.isArray(arr)) return obj;
-      const fields = params.fields || {};
-      for (const item of arr) {
-        if (!item) continue;
-        for (const path in fields) {
-          let value = fields[path];
+      return (obj, env) => {
+        for (const item of compiled) {
+          let value = item.value;
           if (typeof value === 'string' && value.includes('{{')) {
-            value = Utils.resolveTemplate(value, item);
+            value = Utils.resolveTemplate(value, obj);
           }
-          Utils.setPath(item, path, value);
+          Utils.setPath(obj, item.tokens, value);
         }
-      }
-      return obj;
+        return obj;
+      };
     },
 
-    filterArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (!Array.isArray(arr)) return obj;
+    mapArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      const fields = params.fields || {};
+      const compiled = Object.entries(fields).map(([path, value]) => ({
+        tokens: Utils.compilePath(path),
+        value
+      }));
+
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (!Array.isArray(arr)) return obj;
+
+        for (const itemObj of arr) {
+          if (!itemObj) continue;
+          for (const item of compiled) {
+            let value = item.value;
+            if (typeof value === 'string' && value.includes('{{')) {
+              value = Utils.resolveTemplate(value, itemObj);
+            }
+            Utils.setPath(itemObj, item.tokens, value);
+          }
+        }
+        return obj;
+      };
+    },
+
+    filterArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
       const excludeSet = new Set(params.excludeKeys || []);
-      Utils.setPath(obj, params.path, arr.filter(item => !excludeSet.has(item && item[params.keyField])));
-      return obj;
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (!Array.isArray(arr)) return obj;
+        Utils.setPath(obj, arrPathTokens, arr.filter(item => !excludeSet.has(item && item[params.keyField])));
+        return obj;
+      };
     },
 
-    clearArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (Array.isArray(arr)) arr.length = 0;
-      return obj;
+    clearArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (Array.isArray(arr)) arr.length = 0;
+        return obj;
+      };
     },
 
     deleteFields: (params) => (obj, env) => {
@@ -79,97 +101,114 @@ function createProcessorFactory(requestId) {
       return obj;
     },
 
-    sliceArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (Array.isArray(arr) && arr.length > params.keepCount) {
-        Utils.setPath(obj, params.path, arr.slice(0, params.keepCount));
-      }
-      return obj;
+    sliceArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (Array.isArray(arr) && arr.length > params.keepCount) {
+          Utils.setPath(obj, arrPathTokens, arr.slice(0, params.keepCount));
+        }
+        return obj;
+      };
     },
 
-    shiftArray: (params) => (obj, env) => {
-      const arr = Utils.getPath(obj, params.path);
-      if (Array.isArray(arr) && arr.length > 0) arr.shift();
-      return obj;
+    shiftArray: (params) => {
+      const arrPathTokens = Utils.compilePath(params.path);
+      return (obj, env) => {
+        const arr = Utils.getPath(obj, arrPathTokens);
+        if (Array.isArray(arr) && arr.length > 0) arr.shift();
+        return obj;
+      };
     },
 
-    processByKeyPrefix: (params) => (obj, env) => {
-      const target = Utils.getPath(obj, params.objPath);
-      if (!target || typeof target !== 'object') return obj;
+    processByKeyPrefix: (params) => {
+      const objPathTokens = Utils.compilePath(params.objPath);
       const rules = Object.entries(params.prefixRules || {});
-      for (const key in target) {
-        const value = target[key];
-        if (!value || typeof value !== 'object') continue;
-        for (const [prefix, handler] of rules) {
-          if (prefix !== '*' && key.startsWith(prefix)) {
-            Object.assign(value, handler);
-            break;
-          }
-          if (prefix === '*') {
-            Object.assign(value, handler);
-            break;
+
+      return (obj, env) => {
+        const target = Utils.getPath(obj, objPathTokens);
+        if (!target || typeof target !== 'object') return obj;
+
+        for (const key in target) {
+          const value = target[key];
+          if (!value || typeof value !== 'object') continue;
+          for (const [prefix, handler] of rules) {
+            if (prefix !== '*' && key.startsWith(prefix)) {
+              Object.assign(value, handler);
+              break;
+            }
+            if (prefix === '*') {
+              Object.assign(value, handler);
+              break;
+            }
           }
         }
-      }
-      return obj;
+        return obj;
+      };
     },
 
-    notify: (params) => (obj, env) => {
+    notify: (params) => {
       const title = params.title || 'UnifiedVIP';
-      let subtitle = params.subtitle || '';
-      let message = params.message || '';
+      const subtitleFieldTokens = params.subtitleField ? Utils.compilePath(params.subtitleField) : null;
+      const messageFieldTokens = params.messageField ? Utils.compilePath(params.messageField) : null;
+      const markFieldTokens = params.markField ? Utils.compilePath(params.markField) : null;
 
-      if (params.subtitleField) {
-        subtitle = Utils.getPath(obj, params.subtitleField) || subtitle;
-      }
+      return (obj, env) => {
+        let subtitle = params.subtitle || '';
+        let message = params.message || '';
 
-      // template 优先
-      if (params.template) {
-        message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-          return Utils.getPath(obj, key) || match;
-        });
-      } else if (params.messageField) {
-        // 使用 formatObject 处理对象
-        const fieldData = Utils.getPath(obj, params.messageField);
-        if (fieldData) {
-          if (typeof fieldData === 'object') {
-            message = Utils.formatObject(fieldData, params.separator || '\n');
-          } else {
-            message = String(fieldData);
+        if (subtitleFieldTokens) {
+          subtitle = Utils.getPath(obj, subtitleFieldTokens) || subtitle;
+        }
+
+        // template 优先
+        if (params.template) {
+          message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+            return Utils.getPath(obj, key) || match;
+          });
+        } else if (messageFieldTokens) {
+          // 使用 formatObject 处理对象
+          const fieldData = Utils.getPath(obj, messageFieldTokens);
+          if (fieldData) {
+            if (typeof fieldData === 'object') {
+              message = Utils.formatObject(fieldData, params.separator || '\n');
+            } else {
+              message = String(fieldData);
+            }
           }
         }
-      }
 
-      if (params.prefix) {
-        message = params.prefix + message;
-      }
-
-      const maxLen = params.maxLength || 500;
-      if (message.length > maxLen) {
-        message = message.substring(0, maxLen) + '...';
-      }
-
-      // 平台适配通知
-      if (typeof Platform !== 'undefined') {
-        if (Platform.isQX && typeof $notify !== 'undefined') {
-          $notify(title, subtitle, message, params.options || {});
-        } else if (Platform.isLoon && typeof $notification !== 'undefined') {
-          const url = params.options && params.options['open-url'];
-          if (url) {
-            $notification.post(title, subtitle, message, url);
-          } else {
-            $notification.post(title, subtitle, message);
-          }
-        } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
-          $notification.post(title, subtitle, message, params.options || {});
+        if (params.prefix) {
+          message = params.prefix + message;
         }
-      }
 
-      if (params.markField) {
-        Utils.setPath(obj, params.markField, true);
-      }
+        const maxLen = params.maxLength || 500;
+        if (message.length > maxLen) {
+          message = message.substring(0, maxLen) + '...';
+        }
 
-      return obj;
+        // 平台适配通知
+        if (typeof Platform !== 'undefined') {
+          if (Platform.isQX && typeof $notify !== 'undefined') {
+            $notify(title, subtitle, message, params.options || {});
+          } else if (Platform.isLoon && typeof $notification !== 'undefined') {
+            const url = params.options && params.options['open-url'];
+            if (url) {
+              $notification.post(title, subtitle, message, url);
+            } else {
+              $notification.post(title, subtitle, message);
+            }
+          } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
+            $notification.post(title, subtitle, message, params.options || {});
+          }
+        }
+
+        if (markFieldTokens) {
+          Utils.setPath(obj, markFieldTokens, true);
+        }
+
+        return obj;
+      };
     },
 
     compose: (params, compile) => {

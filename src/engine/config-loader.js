@@ -42,7 +42,7 @@ class SimpleConfigLoader {
     }
 
     // 远程加载
-    const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json?t=${Date.now()}`;
+    const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json`;
 
     Logger.info('ConfigLoader', `${configId} fetching...`);
 

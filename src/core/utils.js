@@ -1,5 +1,29 @@
 // src/core/utils.js
-// 工具函数集 - 完整版
+// 工具函数集 - 路径预编译优化版
+
+const __pathTokenCache = new Map();
+const __maxPathTokenCacheSize = 300;
+
+function _tokenizePath(path) {
+  if (!path || typeof path !== 'string') return [];
+  const hit = __pathTokenCache.get(path);
+  if (hit) return hit;
+
+  const tokens = path.split('.').map(part => {
+    const m = part.match(/^([^\[\]]+)\[(\d+)\]$/);
+    if (m) {
+      return { key: m[1], isArray: true, index: parseInt(m[2], 10) };
+    }
+    return { key: part, isArray: false, index: -1 };
+  });
+
+  if (__pathTokenCache.size >= __maxPathTokenCacheSize) {
+    const firstKey = __pathTokenCache.keys().next().value;
+    __pathTokenCache.delete(firstKey);
+  }
+  __pathTokenCache.set(path, tokens);
+  return tokens;
+}
 
 const Utils = {
   safeJsonParse: (str, defaultVal = null) => {
@@ -10,47 +34,56 @@ const Utils = {
     try { return JSON.stringify(obj); } catch (e) { return '{}'; }
   },
 
-  getPath: (obj, path) => {
-    if (!path || !obj) return undefined;
-    const parts = path.split('.');
+  compilePath: (path) => _tokenizePath(path),
+
+  getPath: (obj, pathOrTokens) => {
+    if (!obj || !pathOrTokens) return undefined;
+    const tokens = Array.isArray(pathOrTokens) ? pathOrTokens : _tokenizePath(pathOrTokens);
     let current = obj;
-    for (const part of parts) {
+
+    for (const token of tokens) {
       if (current == null) return undefined;
-      const match = part.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
-      if (match) {
-        current = current[match[1]] && current[match[1]][parseInt(match[2])];
+      if (token.isArray) {
+        const arr = current[token.key];
+        current = arr && arr[token.index];
       } else {
-        current = current[part];
+        current = current[token.key];
       }
     }
     return current;
   },
 
-  setPath: (obj, path, value) => {
-    if (!path || !obj) return obj;
-    const parts = path.split('.');
-    let current = obj;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      const next = parts[i + 1];
-      const match = part.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
-      const isNextArray = /^\\[.*\\]$/.test(next);
+  setPath: (obj, pathOrTokens, value) => {
+    if (!obj || !pathOrTokens) return obj;
+    const tokens = Array.isArray(pathOrTokens) ? pathOrTokens : _tokenizePath(pathOrTokens);
+    if (!tokens.length) return obj;
 
-      if (match) {
-        const arr = current[match[1]] || (current[match[1]] = []);
-        current = arr[parseInt(match[2])] || (arr[parseInt(match[2])] = isNextArray ? [] : {});
+    let current = obj;
+
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const token = tokens[i];
+      const next = tokens[i + 1];
+
+      if (token.isArray) {
+        const arr = current[token.key] || (current[token.key] = []);
+        if (arr[token.index] == null) {
+          arr[token.index] = next && next.isArray ? [] : {};
+        }
+        current = arr[token.index];
       } else {
-        current = current[part] || (current[part] = isNextArray ? [] : {});
+        if (current[token.key] == null) {
+          current[token.key] = next && next.isArray ? [] : {};
+        }
+        current = current[token.key];
       }
     }
 
-    const last = parts[parts.length - 1];
-    const lastMatch = last.match(/^([^\\[\\]+)\\[(\\d+)\\]$/);
-    if (lastMatch) {
-      const arr = current[lastMatch[1]] || (current[lastMatch[1]] = []);
-      arr[parseInt(lastMatch[2])] = value;
+    const last = tokens[tokens.length - 1];
+    if (last.isArray) {
+      const arr = current[last.key] || (current[last.key] = []);
+      arr[last.index] = value;
     } else {
-      current[last] = value;
+      current[last.key] = value;
     }
     return obj;
   },
