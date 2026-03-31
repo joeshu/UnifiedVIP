@@ -16,6 +16,12 @@ const BUILD_CONFIG = {
   ENABLE_DIAGNOSE: false,
   DEBUG_MODE: true,
 
+  // 构建产物压缩级别：off | safe | aggressive
+  // off: 不压缩，保留原始格式
+  // safe: 去注释行/行尾空白/连续空行（默认，语义安全）
+  // aggressive: 在 safe 基础上去除全部空行（体积更小）
+  COMPACT_LEVEL: 'safe',
+
   // 可选手动版本后缀，例如 'lazy' / 'beta'
   // 留空 '' 则使用 package.json.version 原始版本
   VERSION_TAG: '',
@@ -72,7 +78,8 @@ function loadModule(filename) {
 function build() {
   console.log(`\n🔨 构建 UnifiedVIP v${BUILD_CONFIG.VERSION}`);
   console.log(`   诊断功能: ${BUILD_CONFIG.ENABLE_DIAGNOSE ? '✅ 启用' : '❌ 禁用'}`);
-  console.log(`   DEBUG模式: ${BUILD_CONFIG.DEBUG_MODE ? '✅ 启用' : '❌ 禁用'}\n`);
+  console.log(`   DEBUG模式: ${BUILD_CONFIG.DEBUG_MODE ? '✅ 启用' : '❌ 禁用'}`);
+  console.log(`   压缩级别: ${BUILD_CONFIG.COMPACT_LEVEL || 'safe'}\n`);
 
   // 步骤 1: 读取配置
   console.log('📦 步骤 1: 读取配置...');
@@ -253,17 +260,27 @@ main();
   // 步骤 5: 写入构建产物
   console.log('📦 步骤 5: 写入构建产物...');
 
-  // L5: 轻量压缩（安全版）
-  // - 去除行尾空白
-  // - 去除纯注释行（以 // 开头）
-  // - 合并连续空行
-  // 保留代码与字符串语义，不做激进 token 级压缩
-  const compactScript = fullScript
-    .split('\n')
-    .map(line => line.replace(/[ \t]+$/g, ''))
-    .filter(line => !/^\s*\/\//.test(line))
-    .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
-    .join('\n');
+  // L5: 构建产物压缩（可配置）
+  function compactByLevel(script, level) {
+    const lv = String(level || 'safe').toLowerCase();
+    if (lv === 'off') return script;
+
+    const lines = script
+      .split('\n')
+      .map(line => line.replace(/[ \t]+$/g, ''))
+      .filter(line => !/^\s*\/\//.test(line));
+
+    if (lv === 'aggressive') {
+      return lines.filter(line => line !== '').join('\n');
+    }
+
+    // safe(default): 合并连续空行
+    return lines
+      .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
+      .join('\n');
+  }
+
+  const compactScript = compactByLevel(fullScript, BUILD_CONFIG.COMPACT_LEVEL);
 
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
   fs.writeFileSync(outputPath, compactScript);
