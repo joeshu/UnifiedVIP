@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-31T09:24:29.784Z
+ * 构建时间: 2026-03-31T11:22:26.822Z
  * APP数量: 23
  * ==========================================
  *
@@ -1456,8 +1456,25 @@ async function main(){
     const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
     const cfg = await cl.load(cid,mf.getConfigVersion(cid));
     const env=new Environment(META.name);
-    const eng=new VipEngine(env,rid);
+
+    // 最安全复用：仅复用空闲 VipEngine；并发时自动退化为新建，避免状态污染
+    let eng = g.__UVIP_ENG_IDLE || null;
+    if (eng) {
+      g.__UVIP_ENG_IDLE = null;
+      eng.env = env;
+      eng._requestId = rid;
+    } else {
+      eng = new VipEngine(env,rid);
+    }
+
     const res=await eng.process(resp?resp.body:'',cfg);
+
+    // 归还空闲实例（若槽位已被占用则丢弃）
+    if (!g.__UVIP_ENG_IDLE) {
+      eng.env = null;
+      eng._requestId = '';
+      g.__UVIP_ENG_IDLE = eng;
+    }
 
     Logger.debug('Main',rid+' done ['+cfg.mode+']');
     $done(res)
