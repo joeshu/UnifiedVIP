@@ -1,6 +1,23 @@
 // src/engine/processor-factory.js
 // 处理器工厂 - 创建各类处理器
 
+function sendNotify(title, subtitle, message, options) {
+  if (typeof Platform === 'undefined') return;
+  if (Platform.isQX && typeof $notify !== 'undefined') {
+    $notify(title, subtitle, message, options || {});
+    return;
+  }
+  if (Platform.isLoon && typeof $notification !== 'undefined') {
+    const url = options && options['open-url'];
+    return url
+      ? $notification.post(title, subtitle, message, url)
+      : $notification.post(title, subtitle, message);
+  }
+  if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
+    $notification.post(title, subtitle, message, options || {});
+  }
+}
+
 function createProcessorFactory(requestId) {
   return {
     setFields: (params) => {
@@ -187,21 +204,7 @@ function createProcessorFactory(requestId) {
           message = message.substring(0, maxLen) + '...';
         }
 
-        // 平台适配通知
-        if (typeof Platform !== 'undefined') {
-          if (Platform.isQX && typeof $notify !== 'undefined') {
-            $notify(title, subtitle, message, params.options || {});
-          } else if (Platform.isLoon && typeof $notification !== 'undefined') {
-            const url = params.options && params.options['open-url'];
-            if (url) {
-              $notification.post(title, subtitle, message, url);
-            } else {
-              $notification.post(title, subtitle, message);
-            }
-          } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
-            $notification.post(title, subtitle, message, params.options || {});
-          }
-        }
+        sendNotify(title, subtitle, message, params.options);
 
         if (markFieldTokens) {
           Utils.setPath(obj, markFieldTokens, true);

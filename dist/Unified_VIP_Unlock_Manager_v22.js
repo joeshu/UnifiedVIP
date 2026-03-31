@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-03-31T11:22:26.822Z
+ * 构建时间: 2026-03-31T12:28:10.516Z
  * APP数量: 23
  * ==========================================
  *
@@ -11,9 +11,6 @@
 
 'use strict';
 
-// ==========================================
-// 0. 环境修复 & 配置
-// ==========================================
 if (typeof console === 'undefined') { globalThis.console = { log: () => {} }; }
 
 const CONFIG = {
@@ -36,14 +33,8 @@ const CONFIG = {
 
 const META = { name: 'UnifiedVIP', version: '22.0.0' };
 
-// ==========================================
-// 1. 内置Manifest (P2压缩)
-// ==========================================
 const BUILTIN_MANIFEST = {"version":"22.0.0-d14be627","updated":"2026-03-31","total":23,"configs":{"555dy":{"name":"555电影去广告","urlPattern":"^https?:\\/\\/(?:www\\.)?55[a-z0-9]+\\.shop\\/.*","mode":"html"},"bqwz":{"name":"标枪王者","urlPattern":"^https?:\\/\\/javelin\\.mandrillvr\\.com\\/api\\/data\\/get_game_data","mode":"game"},"bxkt":{"name":"伴学课堂","urlPattern":"^https?:\\/\\/api\\.banxueketang\\.com\\/api\\/classpal\\/app\\/v1","mode":"hybrid"},"cyljy":{"name":"成语来解压","urlPattern":"^https?:\\/\\/yr-game-api\\.feigo\\.fun\\/api\\/user\\/get-game-user-value","mode":"game"},"foday":{"name":"复游会","urlPattern":"^https?:\\/\\/apis\\.folidaymall\\.com\\/online\\/capi\\/component\\/getPageComponents","mode":"json"},"gps":{"name":"GPS工具箱","urlPattern":"^https:\\/\\/service\\.gpstool\\.com\\/app\\/index\\/getUserInfo","mode":"json"},"iappdaily":{"name":"iAppDaily","urlPattern":"^https:\\/\\/api\\.iappdaily\\.com\\/my\\/balance","mode":"json"},"juyeye":{"name":"剧爷爷去广告","urlPattern":"^https?:\\/\\/(?:www\\.)?juyeye\\.cc\\/.*","mode":"html"},"kada":{"name":"KaDa 阅读 VIP Unlock","urlPattern":"^https://service\\.hhdd\\.com/book2","mode":"json"},"keep":{"name":"Keep","urlPattern":"^https?:\\/\\/(?:api|kit)\\.gotokeep\\.com\\/(?:nuocha|gerudo|athena|nuocha\\/plans|suit\\/v5\\/smart|kprime\\/v4\\/suit\\/sales)\\/","mode":"regex"},"kyxq":{"name":"口语星球","urlPattern":"^https?:\\/\\/mapi\\.kouyuxingqiu\\.com\\/api\\/v2","mode":"json"},"mhlz":{"name":"魔幻粒子","urlPattern":"^https?:\\/\\/ss\\.landintheair\\.com\\/storage\\/","mode":"json"},"mingcalc":{"name":"明计算","urlPattern":"^https?://jsq\\.mingcalc\\.cn/XMGetMeCount\\.ashx","mode":"json"},"qiujingapp":{"name":"球竞APP","urlPattern":"^https?:\\/\\/gateway-api\\.yizhilive\\.com\\/api\\/(?:v2\\/index\\/carouses\\/(?:3|6|8|11)|v3\\/index\\/all)","mode":"json"},"qmjyzc":{"name":"全民解压找茬","urlPattern":"^https?://res5\\.haotgame\\.com/cu03/static/OpenDoors/Res/data/levels/\\d+\\.json","mode":"json"},"sylangyue":{"name":"思朗月影视","urlPattern":"^https?:\\/\\/theater-api\\.sylangyue\\.xyz\\/api\\/user\\/info","mode":"json"},"tophub":{"name":"TopHub","urlPattern":"^https:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync","mode":"json"},"tv":{"name":"影视去广告","urlPattern":"^https?:\\/\\/(?:yzy0916|yz1018|yz250907|yz0320|cfvip)\\..+\\.com\\/(?:v2|v1)\\/api\\/(?:basic\\/init|home\\/firstScreen|adInfo\\/getPageAd|home\\/body)","mode":"json"},"v2ex":{"name":"V2EX去广告","urlPattern":"^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).*$","mode":"html"},"vvebo":{"name":"Vvebo Subscription Forward","urlPattern":"^https:\\/\\/fluxapi\\.vvebo\\.vip\\/v1\\/purchase\\/iap\\/subscription","mode":"forward"},"wohome":{"name":"联通智家","urlPattern":"^https:\\/\\/iotpservice\\.smartont\\.net\\/wohome\\/dispatcher","mode":"json"},"xjsm":{"name":"星际使命","urlPattern":"^https?:\\/\\/star\\.jvplay\\.cn\\/v2\\/storage","mode":"json"},"zhenti":{"name":"真题伴侣","urlPattern":"^https?://newtest\\.zoooy111\\.com/mobilev4\\.php/User/index","mode":"json"}}};
 
-// ==========================================
-// 2. 前缀索引 (构建时生成)
-// ==========================================
 const PREFIX_INDEX = {
  exact: {
   'javelin.mandrillvr.com': ["bqwz"],
@@ -152,13 +143,8 @@ const PREFIX_INDEX = {
   'zhenti': ["zhenti"]
  }
 };
-function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}
-
-// ==========================================
-// 3. 平台检测
-// ==========================================
-// src/core/platform.js
-// 平台检测（QX Only）
+const PREFIX_KEYWORDS=[["kouyuxingqiu",["kyxq"]],["banxueketang",["bxkt"]],["iotpservice",["wohome"]],["picturebook",["ipalfish"]],["theater-api",["sylangyue"]],["folidaymall",["foday"]],["tophubdata",["tophub"]],["mandrillvr",["bqwz"]],["qiujingapp",["qiujingapp"]],["iappdaily",["iappdaily"]],["sylangyue",["sylangyue"]],["yizhilive",["qiujingapp"]],["yz250907",["tv"]],["gotokeep",["keep"]],["lifeweek",["slzd"]],["haotgame",["qmjyzc"]],["smartont",["wohome"]],["ipalfish",["ipalfish"]],["mingcalc",["mingcalc"]],["fluxapi",["vvebo"]],["javelin",["bqwz"]],["gpstool",["gps"]],["qiujing",["qiujingapp"]],["yz1018",["tv"]],["yz0320",["tv"]],["nuocha",["keep"]],["gerudo",["keep"]],["athena",["keep"]],["tophub",["tophub"]],["idaily",["tophub"]],["jvplay",["xjsm"]],["qmjyzc",["qmjyzc"]],["wohome",["wohome"]],["zhenti",["zhenti"]],["cfvip",["tv"]],["remai",["tophub"]],["vvebo",["vvebo"]],["cyljy",["cyljy"]],["feigo",["cyljy"]],["foday",["foday"]],["keep",["keep"]],["v2ex",["v2ex"]],["slzd",["slzd"]],["kyxq",["kyxq"]],["mhlz",["mhlz"]],["xjsm",["xjsm"]],["bqwz",["bqwz"]],["bxkt",["bxkt"]],["kada",["kada"]],["hhdd",["kada"]],["iapp",["iappdaily"]],["yzy",["tv"]],["qmj",["qmjyzc"]],["gps",["gps"]],["jsq",["mingcalc"]],["yz",["tv"]],["cf",["tv"]]];
+function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};for(const[kw,ids]of PREFIX_KEYWORDS)if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}
 
 const Platform = {
   isQX: true,
@@ -170,12 +156,6 @@ const Platform = {
     return 'QX';
   }
 };
-
-// ==========================================
-// 4. 日志系统
-// ==========================================
-// src/core/logger.js
-// 日志系统 - DEBUG 模式下输出到 QX 控制台
 
 function _log(level, tag, msg) {
   if (typeof CONFIG === 'undefined' || !CONFIG.DEBUG) return;
@@ -191,12 +171,6 @@ const Logger = {
   debug: (tag, msg) => _log('debug', tag, msg),
   warn:  (tag, msg) => _log('warn', tag, msg)
 };
-
-// ==========================================
-// 5. M3存储系统
-// ==========================================
-// src/core/storage.js
-// M3单键存储系统 - 与 vip-unlock-configs 兼容版本
 
 const Storage = (() => {
   const KEY = 'vip_v22_data';
@@ -216,7 +190,6 @@ const Storage = (() => {
         const item = all[configId];
         const ttl = typeof CONFIG !== 'undefined' ? CONFIG.CONFIG_CACHE_TTL : 24 * 60 * 60 * 1000;
         if (item && (Date.now() - item.t) < ttl) {
-          // 修复：返回 JSON 字符串，与 vip-unlock-configs 兼容
           return JSON.stringify(item);
         }
       } catch (e) {}
@@ -230,7 +203,6 @@ const Storage = (() => {
         try { all = JSON.parse(raw); } catch (e) {}
       }
 
-      // 兼容处理：value 可能是对象或 JSON 字符串
       let parsed;
       try {
         parsed = typeof value === 'string' ? JSON.parse(value) : value;
@@ -238,7 +210,6 @@ const Storage = (() => {
         parsed = value;
       }
 
-      // 确保存储结构包含 v, t, d
       all[configId] = {
         v: parsed.v || '1.0',
         t: Date.now(),
@@ -248,7 +219,6 @@ const Storage = (() => {
       let str = JSON.stringify(all);
       const maxSize = typeof Platform !== 'undefined' && Platform.isQX ? 500000 : Infinity;
 
-      // M3: 超限保护，保留最近3个
       if (str.length > maxSize) {
         const sorted = Object.entries(all)
           .sort((a, b) => (b[1].t || 0) - (a[1].t || 0))
@@ -266,12 +236,6 @@ const Storage = (() => {
     remove: (key) => qx.remove(key)
   };
 })();
-
-// ==========================================
-// 6. HTTP客户端
-// ==========================================
-// src/core/http.js
-// HTTP 客户端 - QX Only
 
 const HTTP = (() => {
   function normalizeTimeoutMs(value, fallback = 10000) {
@@ -340,12 +304,6 @@ const HTTP = (() => {
     })
   };
 })();
-
-// ==========================================
-// 7. 工具函数
-// ==========================================
-// src/core/utils.js
-// 工具函数集 - 路径预编译优化版
 
 const __pathTokenCache = new Map();
 const __maxPathTokenCacheSize = 300;
@@ -468,9 +426,6 @@ const Utils = {
   }
 };
 
-// ==========================================
-// 8. 正则缓存池
-// ==========================================
 const RegexPool = (() => {
   const cache = new Map();
   const MAX_SIZE = 50;
@@ -499,11 +454,22 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { RegexPool };
 }
 
-// ==========================================
-// 9. 处理器工厂
-// ==========================================
-// src/engine/processor-factory.js
-// 处理器工厂 - 创建各类处理器
+function sendNotify(title, subtitle, message, options) {
+  if (typeof Platform === 'undefined') return;
+  if (Platform.isQX && typeof $notify !== 'undefined') {
+    $notify(title, subtitle, message, options || {});
+    return;
+  }
+  if (Platform.isLoon && typeof $notification !== 'undefined') {
+    const url = options && options['open-url'];
+    return url
+      ? $notification.post(title, subtitle, message, url)
+      : $notification.post(title, subtitle, message);
+  }
+  if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
+    $notification.post(title, subtitle, message, options || {});
+  }
+}
 
 function createProcessorFactory(requestId) {
   return {
@@ -665,13 +631,11 @@ function createProcessorFactory(requestId) {
           subtitle = Utils.getPath(obj, subtitleFieldTokens) || subtitle;
         }
 
-        // template 优先
         if (params.template) {
           message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
             return Utils.getPath(obj, key) || match;
           });
         } else if (messageFieldTokens) {
-          // 使用 formatObject 处理对象
           const fieldData = Utils.getPath(obj, messageFieldTokens);
           if (fieldData) {
             if (typeof fieldData === 'object') {
@@ -691,21 +655,7 @@ function createProcessorFactory(requestId) {
           message = message.substring(0, maxLen) + '...';
         }
 
-        // 平台适配通知
-        if (typeof Platform !== 'undefined') {
-          if (Platform.isQX && typeof $notify !== 'undefined') {
-            $notify(title, subtitle, message, params.options || {});
-          } else if (Platform.isLoon && typeof $notification !== 'undefined') {
-            const url = params.options && params.options['open-url'];
-            if (url) {
-              $notification.post(title, subtitle, message, url);
-            } else {
-              $notification.post(title, subtitle, message);
-            }
-          } else if ((Platform.isSurge || Platform.isStash) && typeof $notification !== 'undefined') {
-            $notification.post(title, subtitle, message, params.options || {});
-          }
-        }
+        sendNotify(title, subtitle, message, params.options);
 
         if (markFieldTokens) {
           Utils.setPath(obj, markFieldTokens, true);
@@ -806,9 +756,6 @@ function createProcessorFactory(requestId) {
   };
 }
 
-// ==========================================
-// 10. 处理器编译器
-// ==========================================
 function createCompiler(factory) {
   const cache = new Map();
 
@@ -829,12 +776,6 @@ function createCompiler(factory) {
   };
 }
 
-// ==========================================
-// 11. Manifest加载器
-// ==========================================
-// src/engine/manifest-loader.js
-// Manifest 加载器 - 优化版（使用构建时 findByPrefix 索引）
-
 class SimpleManifestLoader {
   constructor(requestId) {
     this._requestId = requestId;
@@ -844,7 +785,6 @@ class SimpleManifestLoader {
     this._regexCache = new Map();
     this._memoizedMatches = new Map();
     this._maxMemoizedMatchesSize = 300;
-    // 缓存 build-time findByPrefix（由 PREFIX_INDEX 驱动）
     this._findByPrefix = (typeof findByPrefix === 'function') ? findByPrefix : null;
   }
 
@@ -867,7 +807,6 @@ class SimpleManifestLoader {
       findMatch: (url) => {
         if (!url) return null;
 
-        // 优化：用 hostname 做缓存 key（同一 host 的请求复用结果）
         const cacheKey = self._extractHostname(url);
 
         if (self._memoizedMatches.has(cacheKey)) {
@@ -876,7 +815,6 @@ class SimpleManifestLoader {
 
         let ids = null;
 
-        // 优先使用构建时生成的 findByPrefix（exact → suffix → keyword 三级匹配）
         if (self._findByPrefix) {
           try {
             const hostname = self._extractHostname(url);
@@ -885,7 +823,6 @@ class SimpleManifestLoader {
           } catch (e) {}
         }
 
-        // 兜底：无 findByPrefix 或无命中时测试全部
         const candidates = ids || Object.keys(self._lazyConfigs || {});
 
         for (const id of candidates) {
@@ -927,12 +864,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { SimpleManifestLoader };
 }
 
-// ==========================================
-// 12. 配置加载器
-// ==========================================
-// src/engine/config-loader.js
-// 配置加载器 - 修复版 (与 vip-unlock-configs 兼容)
-
 class SimpleConfigLoader {
   constructor(requestId) {
     this._requestId = requestId;
@@ -957,13 +888,11 @@ class SimpleConfigLoader {
   async load(configId, remoteVersion) {
     const versionedId = this._versionedId(configId);
 
-    // 热路径：内存缓存命中直接返回（跳过 JSON.parse 验证）
     const memHit = this._memCache.get(versionedId);
     if (memHit) {
       return memHit.d;
     }
 
-    // 冷路径：检查持久化缓存（仅内存未命中时执行）
     const cached = Storage.readConfig(versionedId);
     if (cached) {
       try {
@@ -973,7 +902,6 @@ class SimpleConfigLoader {
       } catch (e) {}
     }
 
-    // 远程加载
     const url = `${CONFIG.REMOTE_BASE}/configs/${configId}.json`;
 
     Logger.info('ConfigLoader', `${configId} fetching...`);
@@ -995,14 +923,12 @@ class SimpleConfigLoader {
         throw new Error('Invalid config JSON');
       }
 
-      // 写入缓存 - 使用兼容格式
       Storage.writeConfig(versionedId, {
         v: remoteVersion,
         t: Date.now(),
         d: fresh
       });
 
-      // 预处理配置
       const prepared = this._prepareConfig(fresh);
       this._memCache.set(versionedId, { t: Date.now(), d: prepared });
       return prepared;
@@ -1010,7 +936,6 @@ class SimpleConfigLoader {
     } catch (e) {
       Logger.error('ConfigLoader', `${configId} failed: ${e.message}`);
 
-      // 降级使用缓存（即使过期）
       if (cached) {
         Logger.warn('ConfigLoader', `${configId} using stale cache`);
         const { d } = JSON.parse(cached);
@@ -1028,17 +953,14 @@ class SimpleConfigLoader {
       return config;
     }
 
-    // 预编译处理器（减少每次请求的编译开销）
     if (config.processor) {
       try {
         config._processor = this._compiler(config.processor);
         config.processor = null;
       } catch (e) {
-        // ignore compile error, fallback at runtime
       }
     }
 
-    // 预编译正则替换规则
     if (raw.regexReplacements) {
       config._regexReplacements = raw.regexReplacements.map(r => ({
         pattern: RegexPool.get(r.pattern, r.flags || 'g'),
@@ -1047,7 +969,6 @@ class SimpleConfigLoader {
       config.regexReplacements = null;
     }
 
-    // 预编译游戏资源规则
     if (raw.gameResources) {
       config._gameResources = raw.gameResources.map(r => ({
         field: r.field,
@@ -1057,7 +978,6 @@ class SimpleConfigLoader {
       config.gameResources = null;
     }
 
-    // 预编译 HTML 替换规则
     if (raw.htmlReplacements) {
       config._htmlReplacements = raw.htmlReplacements.map(r => ({
         pattern: RegexPool.get(r.pattern, r.flags || 'gi'),
@@ -1066,7 +986,6 @@ class SimpleConfigLoader {
       config.htmlReplacements = null;
     }
 
-    // 预编译 HTML markers（用于短路）
     if (Array.isArray(raw.htmlMarkers)) {
       config._htmlMarkers = raw.htmlMarkers
         .filter(Boolean)
@@ -1078,15 +997,6 @@ class SimpleConfigLoader {
   }
 }
 
-// ==========================================
-// 13. VIP引擎 (包含 Environment 类)
-// ==========================================
-// src/engine/vip-engine.js
-// VIP引擎 - 增强版 (支持模板替换和 preserveHeaders)
-
-// ==========================================
-// Environment 类
-// ==========================================
 class Environment {
   constructor(name) {
     this.name = name;
@@ -1128,9 +1038,6 @@ class Environment {
   }
 }
 
-// ==========================================
-// VipEngine 类
-// ==========================================
 class VipEngine {
   constructor(env, requestId) {
     this.env = env;
@@ -1142,7 +1049,6 @@ class VipEngine {
       return { body: typeof body === 'string' ? body : Utils.safeJsonStringify(body || {}) };
     }
 
-    // forward/remote 模式不依赖响应 body，必须优先分流，避免空 body 被提前短路
     if (config.mode === 'forward') {
       return await this._processForward(config);
     }
@@ -1183,7 +1089,6 @@ class VipEngine {
       '503': 'Service Unavailable'
     };
 
-    // 支持 {{header}} 模板替换
     const requestHeaders = this.env.getRequestHeaders();
     const requestHeadersLower = {};
     for (const [k, v] of Object.entries(requestHeaders || {})) {
@@ -1409,7 +1314,6 @@ class VipEngine {
 
     let modified = body;
 
-    // 快速短路：规则都无关键字时直接返回，减少 replace 循环
     const markers = config._htmlMarkers || config.htmlMarkers || null;
     if (Array.isArray(markers) && markers.length > 0) {
       const hit = markers.some(m => m && modified.indexOf(m) >= 0);
@@ -1427,19 +1331,15 @@ class VipEngine {
   }
 }
 
-
-// ==========================================
-// 14. 主入口
-// ==========================================
 async function main(){
   const rid=Math.random().toString(36).substr(2,6).toUpperCase();
   try{
     const resp=(typeof $response!=='undefined'&&$response)?$response:null;
-    const fallback=resp?{body:resp.body}:{};
+    const doneFallback=()=>$done(resp?{body:resp.body}:{});
     let u='';
     if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
     else if(resp)u=resp.url||'';
-    if(!u)return $done(fallback);
+    if(!u)return doneFallback();
 
     Logger.debug('Main',rid+'|'+u.split('?')[0].substring(0,60));
 
@@ -1450,14 +1350,13 @@ async function main(){
 
     if(!cid){
       Logger.debug('Main','No match');
-      return $done(fallback)
+      return doneFallback();
     }
 
     const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
     const cfg = await cl.load(cid,mf.getConfigVersion(cid));
     const env=new Environment(META.name);
 
-    // 最安全复用：仅复用空闲 VipEngine；并发时自动退化为新建，避免状态污染
     let eng = g.__UVIP_ENG_IDLE || null;
     if (eng) {
       g.__UVIP_ENG_IDLE = null;
@@ -1469,7 +1368,6 @@ async function main(){
 
     const res=await eng.process(resp?resp.body:'',cfg);
 
-    // 归还空闲实例（若槽位已被占用则丢弃）
     if (!g.__UVIP_ENG_IDLE) {
       eng.env = null;
       eng._requestId = '';

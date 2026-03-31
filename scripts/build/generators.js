@@ -101,8 +101,12 @@ function generatePrefixIndexCode(index) {
     emitGroup('keyword', index.keyword || {}, false);
   }
 
+  const keywordEntries = Object.entries(index.keyword || {})
+    .sort((a, b) => b[0].length - a[0].length);
+
   lines.push('};');
-  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};if(PREFIX_INDEX.keyword)for(const[kw,ids]of Object.entries(PREFIX_INDEX.keyword))if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
+  lines.push(`const PREFIX_KEYWORDS=${JSON.stringify(keywordEntries)};`);
+  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};for(const[kw,ids]of PREFIX_KEYWORDS)if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
   return lines.join('\n');
 }
 

@@ -198,11 +198,11 @@ async function main(){
   const rid=Math.random().toString(36).substr(2,6).toUpperCase();
   try{
     const resp=(typeof $response!=='undefined'&&$response)?$response:null;
-    const fallback=resp?{body:resp.body}:{};
+    const doneFallback=()=>$done(resp?{body:resp.body}:{});
     let u='';
     if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
     else if(resp)u=resp.url||'';
-    if(!u)return $done(fallback);
+    if(!u)return doneFallback();
 
     Logger.debug('Main',rid+'|'+u.split('?')[0].substring(0,60));
 
@@ -213,7 +213,7 @@ async function main(){
 
     if(!cid){
       Logger.debug('Main','No match');
-      return $done(fallback)
+      return doneFallback();
     }
 
     const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
@@ -253,8 +253,20 @@ main();
   // 步骤 5: 写入构建产物
   console.log('📦 步骤 5: 写入构建产物...');
 
+  // L5: 轻量压缩（安全版）
+  // - 去除行尾空白
+  // - 去除纯注释行（以 // 开头）
+  // - 合并连续空行
+  // 保留代码与字符串语义，不做激进 token 级压缩
+  const compactScript = fullScript
+    .split('\n')
+    .map(line => line.replace(/[ \t]+$/g, ''))
+    .filter(line => !/^\s*\/\//.test(line))
+    .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
+    .join('\n');
+
   const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
-  fs.writeFileSync(outputPath, fullScript);
+  fs.writeFileSync(outputPath, compactScript);
   const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
   console.log(`   ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
 
