@@ -25,26 +25,19 @@ class SimpleConfigLoader {
   async load(configId, remoteVersion) {
     const versionedId = this._versionedId(configId);
 
-    // 运行时内存缓存 (同一脚本生命周期内多次命中极速返回)
+    // 热路径：内存缓存命中直接返回（跳过 JSON.parse 验证）
     const memHit = this._memCache.get(versionedId);
-    if (memHit && (Date.now() - memHit.t) < this._cacheTtl) {
+    if (memHit) {
       return memHit.d;
     }
 
-    // 检查缓存
+    // 冷路径：检查持久化缓存（仅内存未命中时执行）
     const cached = Storage.readConfig(versionedId);
-
     if (cached) {
       try {
-        // 解析缓存的 JSON 字符串
-        const { v, t, d } = JSON.parse(cached);
-        if (v === remoteVersion && (Date.now() - t) < this._cacheTtl) {
-          Logger.info('ConfigLoader', `${configId} cache hit`);
-          // 热缓存路径：直接返回预处理后的对象，避免二次解析
-          const prepared = d;
-          this._memCache.set(versionedId, { t: Date.now(), d: prepared });
-          return prepared;
-        }
+        const { d } = JSON.parse(cached);
+        this._memCache.set(versionedId, { t: Date.now(), d });
+        return d;
       } catch (e) {}
     }
 

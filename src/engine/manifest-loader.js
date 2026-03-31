@@ -1,5 +1,5 @@
 // src/engine/manifest-loader.js
-// Manifest 加载器 - QX 精简版（保留主入口所需接口）
+// Manifest 加载器 - 优化版（使用构建时 findByPrefix 索引）
 
 class SimpleManifestLoader {
   constructor(requestId) {
@@ -10,39 +10,21 @@ class SimpleManifestLoader {
     this._regexCache = new Map();
     this._memoizedMatches = new Map();
     this._maxMemoizedMatchesSize = 300;
-    // 预编译 hostname 前缀 → [configId] 索引
-    this._prefixIndex = new Map();
-    this._buildPrefixIndex();
-  }
-
-  _buildPrefixIndex() {
-    const ids = Object.keys(this._lazyConfigs);
-    for (const id of ids) {
-      const patternStr = this._lazyConfigs[id] && this._lazyConfigs[id].urlPattern;
-      if (!patternStr) continue;
-      let prefix = null;
-      try {
-        // 提取 hostname 首段作为前缀（tv/keep/vvebo 等）
-        const m = patternStr.match(/https?:\/\/([^.\/]+)/);
-        if (m && m[1]) prefix = m[1];
-      } catch (e) {}
-      if (prefix) {
-        if (!this._prefixIndex.has(prefix)) this._prefixIndex.set(prefix, []);
-        this._prefixIndex.get(prefix).push(id);
-      }
-    }
-  }
-
-  _getPrefixCandidates(url) {
-    try {
-      const m = url.match(/https?:\/\/([^.\/]+)/);
-      if (m && m[1]) return this._prefixIndex.get(m[1]) || null;
-    } catch (e) {}
-    return null;
+    // 缓存 build-time findByPrefix（由 PREFIX_INDEX 驱动）
+    this._findByPrefix = (typeof findByPrefix === 'function') ? findByPrefix : null;
   }
 
   async load() {
     return this._createProxy();
+  }
+
+  _extractHostname(url) {
+    try {
+      const m = url.match(/^https?:\/\/([^\/\?#]+)/);
+      return m ? m[1].toLowerCase() : url;
+    } catch (e) {
+      return url;
+    }
   }
 
   _createProxy() {
@@ -50,17 +32,29 @@ class SimpleManifestLoader {
     return {
       findMatch: (url) => {
         if (!url) return null;
-        const cacheKey = url;
+
+        // 优化：用 hostname 做缓存 key（同一 host 的请求复用结果）
+        const cacheKey = self._extractHostname(url);
 
         if (self._memoizedMatches.has(cacheKey)) {
           return self._memoizedMatches.get(cacheKey);
         }
 
-        // 前缀快速命中
-        const prefixCandidates = self._getPrefixCandidates(url);
-        const ids = prefixCandidates || Object.keys(self._lazyConfigs || {});
+        let ids = null;
 
-        for (const id of ids) {
+        // 优先使用构建时生成的 findByPrefix（exact → suffix → keyword 三级匹配）
+        if (self._findByPrefix) {
+          try {
+            const hostname = self._extractHostname(url);
+            const result = self._findByPrefix(hostname);
+            if (result && result.ids) ids = result.ids;
+          } catch (e) {}
+        }
+
+        // 兜底：无 findByPrefix 或无命中时测试全部
+        const candidates = ids || Object.keys(self._lazyConfigs || {});
+
+        for (const id of candidates) {
           let regex = self._regexCache.get(id);
           if (!regex && self._lazyConfigs[id]) {
             const patternStr = self._lazyConfigs[id].urlPattern;
