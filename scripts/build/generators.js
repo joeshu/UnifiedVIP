@@ -46,33 +46,19 @@ const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
 }
 
 function generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG }) {
+  // 轻量 Manifest：只保留 URL 匹配所需的最小字段
+  // 完整配置从远程 configs/{id}.json 按需加载
   const configs = {};
   for (const [id, baseCfg] of Object.entries(APP_REGISTRY)) {
     const configPath = path.join(CONFIGS_DIR, `${id}.json`);
     if (fs.existsSync(configPath)) {
       try {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        // 包含基础字段
-        configs[id] = { 
-          name: config.name || id, 
-          urlPattern: config.urlPattern 
+        configs[id] = {
+          name: config.name || id,
+          urlPattern: config.urlPattern
         };
-        // html 模式：包含 mode, htmlMarkers, htmlReplacements
-        if (config.mode === 'html') {
-          configs[id].mode = 'html';
-          if (config.htmlMarkers) configs[id].htmlMarkers = config.htmlMarkers;
-          if (config.htmlReplacements) configs[id].htmlReplacements = config.htmlReplacements;
-          if (config.blockHosts) configs[id].blockHosts = config.blockHosts;
-        }
-        // forward/remote 模式：包含 mode 和相应字段
-        if (config.mode === 'forward' || config.mode === 'remote') {
-          configs[id].mode = config.mode;
-          if (config.forwardUrl) configs[id].forwardUrl = config.forwardUrl;
-          if (config.forwardHeaders) configs[id].forwardHeaders = config.forwardHeaders;
-          if (config.forwardMethod) configs[id].forwardMethod = config.forwardMethod;
-          if (config.forwardBody) configs[id].forwardBody = config.forwardBody;
-          if (config.statusTexts) configs[id].statusTexts = config.statusTexts;
-        }
+        if (config.mode) configs[id].mode = config.mode;
       } catch (e) {
         configs[id] = { name: id, urlPattern: baseCfg.urlPattern };
       }
