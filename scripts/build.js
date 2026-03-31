@@ -143,7 +143,7 @@ ${modules.platform}
 // ==========================================
 // 4. 日志系统
 // ==========================================
-${modules.logger}
+${BUILD_CONFIG.DEBUG_MODE ? modules.logger : 'const Logger = { info: () => {}, error: () => {}, debug: () => {}, warn: () => {} };'}
 
 // ==========================================
 // 5. M3存储系统
@@ -197,10 +197,12 @@ ${diagnoseCode ? '\n// ==========================================\n// 14. 诊断
 async function main(){
   const rid=Math.random().toString(36).substr(2,6).toUpperCase();
   try{
+    const resp=(typeof $response!=='undefined'&&$response)?$response:null;
+    const fallback=resp?{body:resp.body}:{};
     let u='';
     if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
-    else if(typeof $response!=='undefined'&&$response)u=$response.url||'';
-    if(!u)return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{});
+    else if(resp)u=resp.url||'';
+    if(!u)return $done(fallback);
 
     Logger.debug('Main',rid+'|'+u.split('?')[0].substring(0,60));
 
@@ -211,20 +213,21 @@ async function main(){
 
     if(!cid){
       Logger.debug('Main','No match');
-      return $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})
+      return $done(fallback)
     }
 
     const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
     const cfg = await cl.load(cid,mf.getConfigVersion(cid));
     const env=new Environment(META.name);
     const eng=new VipEngine(env,rid);
-    const res=await eng.process(typeof $response!=='undefined'&&$response?$response.body:'',cfg);
+    const res=await eng.process(resp?resp.body:'',cfg);
 
     Logger.debug('Main',rid+' done ['+cfg.mode+']');
     $done(res)
   }catch(e){
     Logger.error('Main',rid+' fail:'+e.message);
-    $done(typeof $response!=='undefined'&&$response?{body:$response.body}:{})
+    const resp=(typeof $response!=='undefined'&&$response)?$response:null;
+    $done(resp?{body:resp.body}:{})
   }
 }
 main();
