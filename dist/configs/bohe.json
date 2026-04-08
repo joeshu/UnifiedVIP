@@ -1,0 +1,33 @@
+{
+  "urlPattern": "^https?:\\/\\/du\\.baicizhan\\.com.*",
+  "id": "bohe",
+  "name": "薄荷",
+  "mode": "json",
+  "processor": {
+    "processor": "setFields",
+    "params": {
+      "fields": {
+        "data.is_vip": 1,
+        "data.is_try_vip": 1,
+        "data.vip_expire": "2099-12-31 23:59:59",
+        "data.vip_days": 99999,
+        "data.vipDays": 99999,
+        "data.expireDate": "2099-12-31 23:59:59",
+        "data.valid": true,
+        "data.termEndDate": "2099-12-31 23:59:59",
+        "data.buy_status": 1,
+        "data.book_package_buy_status": 1,
+        "data.has_read_service": 1,
+        "data.is_restricted": 0,
+        "data.can_read": 1,
+        "data.book.buy_status": 1,
+        "data.book.book_package_buy_status": 1,
+        "data.book.has_read_service": 1,
+        "data.isVIP": true,
+        "data.isTrial": false,
+        "data.expireTime": "2099-12-31 23:59:59",
+        "data.expireTimestamp": 4102358400
+      }
+    }
+  }
+}
