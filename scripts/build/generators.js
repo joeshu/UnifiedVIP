@@ -174,7 +174,7 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
 
   const manualHosts = [
     'juyeye.cc','*.juyeye.cc','55d6b4o1m2.shop','www.55d6b4o1m2.shop','59.82.99.78','*.ipalfish.com','service.hhdd.com','apis.lifeweek.com.cn','fluxapi.vvebo.vip','res5.haotgame.com',
-    'jsq.mingcalc.cn','theater-api.sylangyue.xyz','api.iappdaily.com','api2.tophub.today','api2.tophub.app','api3.tophub.xyz',
+    'jsq.mingcalc.cn','theater-api.sylangyue.xyz','api.iappdaily.com','api2.tophub.today','api2.tophub.app','api3.tophub.xyz','du.baicizhan.com',
     'api3.tophub.today','api3.tophub.app','tophub.tophubdata.com','tophub2.tophubdata.com','tophub.idaily.today','tophub2.idaily.today',
     'tophub.remai.today','tophub.iappdaiy.com','tophub.ipadown.com','service.gpstool.com','mapi.kouyuxingqiu.com','ss.landintheair.com',
     '*.v2ex.com','v2ex.com','apis.folidaymall.com','gateway-api.yizhilive.com','pagead*.googlesyndication.com','api.gotokeep.com','kit.gotokeep.com',
