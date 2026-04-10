@@ -8,6 +8,7 @@
     "validate": "node scripts/validate.js",
     "check:mitm": "node scripts/check-mitm.js",
     "mitm:append": "node scripts/append-mitm-observed.js",
+    "benchmark:prefix": "node scripts/benchmark-prefix.js",
     "watch": "nodemon --watch src --exec \"npm run build\"",
     "clean": "rm -rf dist/",
     "verify": "ls -la dist/ && head -c 200 dist/Unified_VIP_Unlock_Manager_v22.js",
