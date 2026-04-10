@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 const { performance } = require('perf_hooks');
+const fs = require('fs');
+const path = require('path');
 const { generatePrefixIndex } = require('../src/apps/_prefix-index');
 
 function baselineFactory(index) {
@@ -21,18 +23,64 @@ function baselineFactory(index) {
 
 function optimizedFactory(index) {
   const suffixEntries = Object.entries(index.suffix || {}).sort((a, b) => b[0].length - a[0].length);
-  const keywordEntries = Object.entries(index.keyword || {}).sort((a, b) => b[0].length - a[0].length);
-  const keywordBuckets = {};
-  for (const [kw, ids] of keywordEntries) {
-    const head = kw[0] || '#';
-    if (!keywordBuckets[head]) keywordBuckets[head] = [];
-    keywordBuckets[head].push([kw, ids]);
+
+  const suffixTrie = {};
+  for (const [suffix, ids] of suffixEntries) {
+    const parts = suffix.split('.').reverse();
+    let node = suffixTrie;
+    for (const p of parts) {
+      if (!node[p]) node[p] = {};
+      node = node[p];
+    }
+    node.$ = ids;
   }
+
+  function findBySuffixTrie(h) {
+    const parts = h.split('.').reverse();
+    let node = suffixTrie;
+    let found = null;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (!node[p]) break;
+      node = node[p];
+      if (node.$) {
+        found = {
+          ids: node.$,
+          method: 'suffix',
+          matched: parts.slice(0, i + 1).reverse().join('.')
+        };
+      }
+    }
+    return found;
+  }
+
+  const keywordEntries = Object.entries(index.keyword || {}).sort((a, b) => b[0].length - a[0].length);
+  const keywordBuckets2 = {};
+  const keywordBuckets1 = {};
+  for (const [kw, ids] of keywordEntries) {
+    if (kw.length >= 2) {
+      const k2 = kw.slice(0, 2);
+      if (!keywordBuckets2[k2]) keywordBuckets2[k2] = [];
+      keywordBuckets2[k2].push([kw, ids]);
+    } else {
+      const k1 = kw[0] || '#';
+      if (!keywordBuckets1[k1]) keywordBuckets1[k1] = [];
+      keywordBuckets1[k1].push([kw, ids]);
+    }
+  }
+
   const cache = new Map();
   const CACHE_LIMIT = 200;
-
+  function cacheGet(k) {
+    if (!cache.has(k)) return undefined;
+    const v = cache.get(k);
+    cache.delete(k);
+    cache.set(k, v);
+    return v;
+  }
   function cacheSet(k, v) {
-    if (cache.size >= CACHE_LIMIT) {
+    if (cache.has(k)) cache.delete(k);
+    else if (cache.size >= CACHE_LIMIT) {
       const first = cache.keys().next().value;
       cache.delete(first);
     }
@@ -42,26 +90,42 @@ function optimizedFactory(index) {
   return function findByPrefixOptimized(hostname) {
     const h = String(hostname || '').toLowerCase();
     if (!h) return null;
-    if (cache.has(h)) return cache.get(h);
+    const c = cacheGet(h);
+    if (c !== undefined) return c;
 
     let out = null;
     if (index.exact[h]) {
       out = { ids: index.exact[h], method: 'exact', matched: h };
     } else {
-      for (const [suffix, ids] of suffixEntries) {
-        if (h === suffix || h.endsWith('.' + suffix)) {
-          out = { ids, method: 'suffix', matched: suffix };
-          break;
+      out = findBySuffixTrie(h);
+      if (!out) {
+        const seen2 = new Set();
+        for (let i = 0; i < h.length - 1; i++) {
+          const a = h[i], b = h[i + 1];
+          if (a === '.' || a === '-' || a === '_') continue;
+          if (b === '.' || b === '-' || b === '_') continue;
+          const k2 = a + b;
+          if (seen2.has(k2)) continue;
+          seen2.add(k2);
+          const bucket = keywordBuckets2[k2];
+          if (!bucket) continue;
+          for (const [kw, ids] of bucket) {
+            if (h.includes(kw)) {
+              out = { ids, method: 'keyword', matched: kw };
+              break;
+            }
+          }
+          if (out) break;
         }
       }
       if (!out) {
-        const seen = new Set();
+        const seen1 = new Set();
         for (let i = 0; i < h.length; i++) {
           const ch = h[i];
           if (ch === '.' || ch === '-' || ch === '_') continue;
-          if (seen.has(ch)) continue;
-          seen.add(ch);
-          const bucket = keywordBuckets[ch];
+          if (seen1.has(ch)) continue;
+          seen1.add(ch);
+          const bucket = keywordBuckets1[ch];
           if (!bucket) continue;
           for (const [kw, ids] of bucket) {
             if (h.includes(kw)) {
@@ -94,7 +158,7 @@ function bench(name, fn, hosts, rounds = 5) {
   }
   const avg = times.reduce((a, b) => a + b, 0) / times.length;
   const ops = (hosts.length / (avg / 1000)).toFixed(0);
-  console.log(`${name}: avg=${avg.toFixed(2)}ms ops/s=${ops} matched=${matched}/${hosts.length}`);
+  return { name, avg, ops: Number(ops), matched, total: hosts.length };
 }
 
 function randomLabel(len = 8) {
@@ -125,6 +189,46 @@ function makeHostData(index) {
   return { repeated, diverse };
 }
 
+function formatLine(r) {
+  return `${r.name}: avg=${r.avg.toFixed(2)}ms ops/s=${r.ops} matched=${r.matched}/${r.total}`;
+}
+
+function writeMarkdownReport(index, results) {
+  const reportPath = path.join(__dirname, '../docs/benchmark-prefix.md');
+  const now = new Date().toISOString();
+
+  const repBase = results.repeated.baseline;
+  const repOpt = results.repeated.optimized;
+  const divBase = results.diverse.baseline;
+  const divOpt = results.diverse.optimized;
+
+  const repGain = (repOpt.ops / Math.max(repBase.ops, 1)).toFixed(2);
+  const divGain = (divOpt.ops / Math.max(divBase.ops, 1)).toFixed(2);
+
+  const md = [
+    '# Prefix Matching Benchmark',
+    '',
+    `- Generated: ${now}`,
+    `- Index: exact=${Object.keys(index.exact).length}, suffix=${Object.keys(index.suffix).length}, keyword=${Object.keys(index.keyword).length}`,
+    '',
+    '## High-repeat hosts (cache friendly)',
+    '',
+    `- baseline: avg=${repBase.avg.toFixed(2)}ms, ops/s=${repBase.ops}`,
+    `- optimized: avg=${repOpt.avg.toFixed(2)}ms, ops/s=${repOpt.ops}`,
+    `- gain: **${repGain}x**`,
+    '',
+    '## Diverse hosts (cache less friendly)',
+    '',
+    `- baseline: avg=${divBase.avg.toFixed(2)}ms, ops/s=${divBase.ops}`,
+    `- optimized: avg=${divOpt.avg.toFixed(2)}ms, ops/s=${divOpt.ops}`,
+    `- gain: **${divGain}x**`,
+    ''
+  ];
+
+  fs.writeFileSync(reportPath, md.join('\n'));
+  return reportPath;
+}
+
 console.log('=== Prefix Matching Benchmark ===');
 const index = generatePrefixIndex();
 const baseline = baselineFactory(index);
@@ -133,8 +237,18 @@ const { repeated, diverse } = makeHostData(index);
 
 console.log(`index: exact=${Object.keys(index.exact).length}, suffix=${Object.keys(index.suffix).length}, keyword=${Object.keys(index.keyword).length}`);
 console.log('--- high-repeat hosts (cache friendly) ---');
-bench('baseline', baseline, repeated, 6);
-bench('optimized', optimized, repeated, 6);
+const repBase = bench('baseline', baseline, repeated, 6);
+const repOpt = bench('optimized', optimized, repeated, 6);
+console.log(formatLine(repBase));
+console.log(formatLine(repOpt));
 console.log('--- diverse hosts (cache less friendly) ---');
-bench('baseline', baseline, diverse, 6);
-bench('optimized', optimized, diverse, 6);
+const divBase = bench('baseline', baseline, diverse, 6);
+const divOpt = bench('optimized', optimized, diverse, 6);
+console.log(formatLine(divBase));
+console.log(formatLine(divOpt));
+
+const out = writeMarkdownReport(index, {
+  repeated: { baseline: repBase, optimized: repOpt },
+  diverse: { baseline: divBase, optimized: divOpt }
+});
+console.log(`\n📄 benchmark report: ${out}`);

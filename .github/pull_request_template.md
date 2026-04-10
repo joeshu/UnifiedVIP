@@ -7,6 +7,7 @@
 - [ ] 已运行 `npm run validate`
 - [ ] 已运行 `npm run check:mitm`
 - [ ] 已运行 `npm run build` 并确认 `dist/rewrite.conf` 变更符合预期
+- [ ] 若涉及性能路径，已运行 `npm run benchmark:prefix`
 
 ## MITM 变更摘要
 
@@ -21,4 +22,8 @@
 ```text
 npm run validate
 npm run check:mitm
+npm run build
+npm run benchmark:prefix
 ```
+
+> 治理规范：请参阅 `docs/governance.md`
