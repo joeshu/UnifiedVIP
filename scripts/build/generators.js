@@ -155,6 +155,22 @@ function extractHostname(pattern) {
   return null;
 }
 
+function isQxSafeMitmHost(host) {
+  if (!host || typeof host !== 'string') return false;
+  const h = host.trim().toLowerCase();
+
+  // 1) 精确 IPv4
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(h)) return true;
+
+  // 2) 精确域名
+  if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(h)) return true;
+
+  // 3) 仅支持左侧子域通配：*.example.com
+  if (/^\*\.(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(h)) return true;
+
+  return false;
+}
+
 function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR }) {
   const autoHostSet = new Set();
   
@@ -188,7 +204,10 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     'yzy0916.*.com','yz1018.*.com','yz250907.*.com','yz0320.*.com','cfvip.*.com','yr-game-api.feigo.fun','star.jvplay.cn','iotpservice.smartont.net'
   ];
 
-  const hostnames = Array.from(new Set([...manualHosts, ...Array.from(autoHostSet)])).sort();
+  const hostnames = Array.from(new Set([...manualHosts, ...Array.from(autoHostSet)]))
+    .map(h => String(h || '').trim())
+    .filter(h => h && isQxSafeMitmHost(h))
+    .sort();
   let conf = `# Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}\n# 构建时间: ${new Date().toISOString()}\n# APP数量: ${Object.keys(APP_REGISTRY).length}\n\n[rewrite_local]\n\n`;
 
   // 获取完整配置（用于显示名称）

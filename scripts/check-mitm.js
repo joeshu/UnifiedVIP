@@ -48,6 +48,22 @@ function classifyHost(host) {
   return 'unknown';
 }
 
+function isQxSafeHost(host) {
+  const h = String(host || '').trim().toLowerCase();
+  if (!h) return false;
+
+  // 精确 IPv4
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(h)) return true;
+
+  // 精确域名
+  if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(h)) return true;
+
+  // 仅左侧通配：*.example.com
+  if (/^\*\.(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(h)) return true;
+
+  return false;
+}
+
 function run() {
   const allConfigs = getAllConfigs();
   const errors = [];
@@ -61,12 +77,13 @@ function run() {
       ? cfg.mitmHosts.filter(h => typeof h === 'string' && h.trim()).map(h => h.trim())
       : [];
     const autoHost = extractHostname(cfg.urlPattern);
+    const mitmOptional = cfg.mitmOptional === true;
 
-    if (explicitHosts.length === 0 && !autoHost) {
+    if (!mitmOptional && explicitHosts.length === 0 && !autoHost) {
       errors.push(`${id}: 无法从 urlPattern 提取 hostname，且未配置 mitmHosts`);
     }
 
-    if (isComplexUrlPattern(cfg.urlPattern) && explicitHosts.length === 0) {
+    if (!mitmOptional && isComplexUrlPattern(cfg.urlPattern) && explicitHosts.length === 0) {
       errors.push(`${id}: 复杂 urlPattern 必须显式配置 mitmHosts`);
     }
 
@@ -83,6 +100,10 @@ function run() {
 
       if (/^\*\.[^.]+\.[^.]+\.[^.]+/.test(h)) {
         warnings.push(`${id}: 多级通配 host 请确认必要性 -> ${h}`);
+      }
+
+      if (!isQxSafeHost(h)) {
+        warnings.push(`${id}: 非 QX 安全的 mitmHosts 已在构建时自动过滤 -> ${h}`);
       }
     });
   }
