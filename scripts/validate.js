@@ -95,9 +95,9 @@ function isComplexUrlPattern(pattern) {
 }
 
 function validateMitmHints(id, cfg, warnings) {
-  const hasMitmHosts = Array.isArray(cfg.mitmHosts) && cfg.mitmHosts.length > 0;
-  if (!hasMitmHosts && isComplexUrlPattern(cfg.urlPattern)) {
-    warnings.push(`${id}: urlPattern 含分组/分支，建议显式提供 mitmHosts 以避免 [mitm] 漏配`);
+  const hasMitmHostsField = Array.isArray(cfg.mitmHosts);
+  if (!hasMitmHostsField) {
+    warnings.push(`${id}: 缺少 mitmHosts 字段（建议显式配置）`);
   }
 }
 

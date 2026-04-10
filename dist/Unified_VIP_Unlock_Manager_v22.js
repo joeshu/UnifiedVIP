@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-04-10T07:20:13.622Z
+ * 构建时间: 2026-04-10T14:48:52.433Z
  * APP数量: 25
  * ==========================================
  *
@@ -152,8 +152,8 @@ const PREFIX_KEYWORDS=[["kouyuxingqiu",["kyxq"]],["banxueketang",["bxkt"]],["iot
 const PREFIX_KEYWORDS_BY_HEAD={"k":[["kouyuxingqiu",["kyxq"]],["keep",["keep"]],["kyxq",["kyxq"]],["kada",["kada"]]],"b":[["banxueketang",["bxkt"]],["bqwz",["bqwz"]],["bxkt",["bxkt"]]],"i":[["iotpservice",["wohome"]],["iappdaily",["iappdaily"]],["ipalfish",["ipalfish"]],["idaily",["tophub"]],["iapp",["iappdaily"]]],"p":[["picturebook",["ipalfish"]]],"t":[["theater-api",["sylangyue"]],["tophubdata",["tophub"]],["tophub",["tophub"]]],"f":[["folidaymall",["foday"]],["fluxapi",["vvebo"]],["feigo",["cyljy"]],["foday",["foday"]]],"m":[["mandrillvr",["bqwz"]],["mingcalc",["mingcalc"]],["mhlz",["mhlz"]]],"q":[["qiujingapp",["qiujingapp"]],["qiujing",["qiujingapp"]],["qmjyzc",["qmjyzc"]],["qmj",["qmjyzc"]]],"s":[["sylangyue",["sylangyue"]],["smartont",["wohome"]],["slzd",["slzd"]]],"y":[["yizhilive",["qiujingapp"]],["yz250907",["tv"]],["yz1018",["tv"]],["yz0320",["tv"]],["yzy",["tv"]],["yz",["tv"]]],"g":[["gotokeep",["keep"]],["gpstool",["gps"]],["gerudo",["keep"]],["gps",["gps"]]],"l":[["lifeweek",["slzd"]]],"h":[["haotgame",["qmjyzc"]],["hhdd",["kada"]]],"j":[["javelin",["bqwz"]],["jvplay",["xjsm"]],["jsq",["mingcalc"]]],"n":[["nuocha",["keep"]]],"a":[["athena",["keep"]]],"w":[["wohome",["wohome"]]],"z":[["zhenti",["zhenti"]]],"c":[["cfvip",["tv"]],["cyljy",["cyljy"]],["cf",["tv"]]],"r":[["remai",["tophub"]]],"v":[["vvebo",["vvebo"]],["v2ex",["v2ex"]]],"x":[["xjsm",["xjsm"]]]};
 const HOST_MATCH_CACHE=new Map();
 const HOST_MATCH_CACHE_LIMIT=200;
-function hostCacheGet(h){return HOST_MATCH_CACHE.has(h)?HOST_MATCH_CACHE.get(h):undefined}
-function hostCacheSet(h,v){if(HOST_MATCH_CACHE.size>=HOST_MATCH_CACHE_LIMIT){const k=HOST_MATCH_CACHE.keys().next().value;HOST_MATCH_CACHE.delete(k)}HOST_MATCH_CACHE.set(h,v)}
+function hostCacheGet(h){if(!HOST_MATCH_CACHE.has(h))return undefined;const v=HOST_MATCH_CACHE.get(h);HOST_MATCH_CACHE.delete(h);HOST_MATCH_CACHE.set(h,v);return v}
+function hostCacheSet(h,v){if(HOST_MATCH_CACHE.has(h))HOST_MATCH_CACHE.delete(h);else if(HOST_MATCH_CACHE.size>=HOST_MATCH_CACHE_LIMIT){const k=HOST_MATCH_CACHE.keys().next().value;HOST_MATCH_CACHE.delete(k)}HOST_MATCH_CACHE.set(h,v)}
 function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{for(const[suffix,ids]of PREFIX_SUFFIXES){if(h===suffix||h.endsWith('.'+suffix)){out={ids,method:'suffix',matched:suffix};break}}if(!out){const seenHeads=new Set();for(let i=0;i<h.length;i++){const ch=h[i];if(ch==='.'||ch==='-'||ch==='_')continue;if(seenHeads.has(ch))continue;seenHeads.add(ch);const bucket=PREFIX_KEYWORDS_BY_HEAD[ch];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}hostCacheSet(h,out);return out}
 
 function _log(level, tag, msg) {
