@@ -181,8 +181,11 @@ function isQxSafeMitmHost(host) {
   // 2) 精确域名
   if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(h)) return true;
 
-  // 3) 仅支持左侧子域通配：*.example.com
+  // 3) 左侧子域通配：*.example.com
   if (/^\*\.(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(h)) return true;
+
+  // 4) 中间单段通配：prefix.*.tld（QX 实测可用）
+  if (/^(?:[a-z0-9-]+\.)+\*\.(?:[a-z0-9-]+\.)*[a-z]{2,}$/.test(h)) return true;
 
   return false;
 }
