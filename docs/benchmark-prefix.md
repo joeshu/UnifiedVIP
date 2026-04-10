@@ -1,16 +1,16 @@
 # Prefix Matching Benchmark
 
-- Generated: 2026-04-10T15:18:46.304Z
-- Index: exact=19, suffix=28, keyword=57
+- Generated: 2026-04-10T23:34:37.067Z
+- Index: exact=19, suffix=27, keyword=53
 
 ## High-repeat hosts (cache friendly)
 
-- baseline: avg=4283.93ms, ops/s=2334
-- optimized: avg=1187.41ms, ops/s=8422
-- gain: **3.61x**
+- baseline: avg=2341.81ms, ops/s=4270
+- optimized: avg=692.60ms, ops/s=14438
+- gain: **3.38x**
 
 ## Diverse hosts (cache less friendly)
 
-- baseline: avg=4452.53ms, ops/s=2246
-- optimized: avg=1621.56ms, ops/s=6167
-- gain: **2.75x**
+- baseline: avg=2553.30ms, ops/s=3917
+- optimized: avg=955.85ms, ops/s=10462
+- gain: **2.67x**

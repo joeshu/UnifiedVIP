@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const Ajv = require('ajv');
-const { APP_REGISTRY, getAllConfigs } = require('../src/apps/_index');
+const { APP_REGISTRY, getAllConfigs, scanConfigs } = require('../src/apps/_index');
 
 const VALID_MODES = new Set(['json', 'regex', 'forward', 'remote', 'game', 'hybrid', 'html']);
 const ajv = new Ajv({ allErrors: true, allowUnionTypes: true });
@@ -137,6 +137,7 @@ function validateConfigs(errors, warnings) {
 }
 
 function validate() {
+  scanConfigs({ silent: false });
   console.log('🔍 验证配置...\n');
 
   const errors = [];

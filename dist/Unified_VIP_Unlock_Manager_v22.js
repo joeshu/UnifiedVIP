@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-04-10T15:06:15.335Z
+ * 构建时间: 2026-04-10T23:41:26.451Z
  * APP数量: 25
  * ==========================================
  *
@@ -71,7 +71,6 @@ const PREFIX_INDEX = {
   'kouyuxingqiu.com': ["kyxq"],
   'landintheair.com': ["mhlz"],
   'mingcalc.cn': ["mingcalc"],
-  'xmgetmecount.ashx': ["mingcalc"],
   'yizhilive.com': ["qiujingapp"],
   'haotgame.com': ["qmjyzc"],
   'sylangyue.xyz': ["sylangyue"],
@@ -107,8 +106,6 @@ const PREFIX_INDEX = {
   'v2ex': ["v2ex"],
   'vvebo': ["vvebo"],
   'fluxapi': ["vvebo"],
-  'slzd': ["slzd"],
-  'lifeweek': ["slzd"],
   'kyxq': ["kyxq"],
   'kouyuxingqiu': ["kyxq"],
   'mhlz': ["mhlz"],
@@ -129,8 +126,6 @@ const PREFIX_INDEX = {
   'iotpservice': ["wohome"],
   'kada': ["kada"],
   'hhdd': ["kada"],
-  'ipalfish': ["ipalfish"],
-  'picturebook': ["ipalfish"],
   'gps': ["gps"],
   'gpstool': ["gps"],
   'iapp': ["iappdaily"],
@@ -147,17 +142,14 @@ const PREFIX_INDEX = {
   'zhenti': ["zhenti"]
  }
 };
-const PREFIX_SUFFIXES=[["xmgetmecount.ashx",["mingcalc"]],["banxueketang.com",["bxkt"]],["kouyuxingqiu.com",["kyxq"]],["landintheair.com",["mhlz"]],["folidaymall.com",["foday"]],["mandrillvr.com",["bqwz"]],["tophubdata.com",["tophub"]],["lanfeitech.com",["xmbd"]],["baicizhan.com",["bohe"]],["iappdaily.com",["iappdaily"]],["yizhilive.com",["qiujingapp"]],["sylangyue.xyz",["sylangyue"]],["gotokeep.com",["keep"]],["haotgame.com",["qmjyzc"]],["idaily.today",["tophub"]],["iappdaiy.com",["tophub"]],["smartont.net",["wohome"]],["zoooy111.com",["zhenti"]],["gpstool.com",["gps"]],["mingcalc.cn",["mingcalc"]],["remai.today",["tophub"]],["ipadown.com",["tophub"]],["feigo.fun",["cyljy"]],["juyeye.cc",["juyeye"]],["vvebo.vip",["vvebo"]],["jvplay.cn",["xjsm"]],["hhdd.com",["kada"]],["v2ex.com",["v2ex"]]];
-const PREFIX_SUFFIX_TRIE={"ashx":{"xmgetmecount":{"$":["mingcalc"]}},"com":{"banxueketang":{"$":["bxkt"]},"kouyuxingqiu":{"$":["kyxq"]},"landintheair":{"$":["mhlz"]},"folidaymall":{"$":["foday"]},"mandrillvr":{"$":["bqwz"]},"tophubdata":{"$":["tophub"]},"lanfeitech":{"$":["xmbd"]},"baicizhan":{"$":["bohe"]},"iappdaily":{"$":["iappdaily"]},"yizhilive":{"$":["qiujingapp"]},"gotokeep":{"$":["keep"]},"haotgame":{"$":["qmjyzc"]},"iappdaiy":{"$":["tophub"]},"zoooy111":{"$":["zhenti"]},"gpstool":{"$":["gps"]},"ipadown":{"$":["tophub"]},"hhdd":{"$":["kada"]},"v2ex":{"$":["v2ex"]}},"xyz":{"sylangyue":{"$":["sylangyue"]}},"today":{"idaily":{"$":["tophub"]},"remai":{"$":["tophub"]}},"net":{"smartont":{"$":["wohome"]}},"cn":{"mingcalc":{"$":["mingcalc"]},"jvplay":{"$":["xjsm"]}},"fun":{"feigo":{"$":["cyljy"]}},"cc":{"juyeye":{"$":["juyeye"]}},"vip":{"vvebo":{"$":["vvebo"]}}};
-const PREFIX_KEYWORDS=[["kouyuxingqiu",["kyxq"]],["banxueketang",["bxkt"]],["iotpservice",["wohome"]],["picturebook",["ipalfish"]],["theater-api",["sylangyue"]],["folidaymall",["foday"]],["tophubdata",["tophub"]],["mandrillvr",["bqwz"]],["qiujingapp",["qiujingapp"]],["iappdaily",["iappdaily"]],["sylangyue",["sylangyue"]],["yizhilive",["qiujingapp"]],["yz250907",["tv"]],["gotokeep",["keep"]],["lifeweek",["slzd"]],["haotgame",["qmjyzc"]],["smartont",["wohome"]],["ipalfish",["ipalfish"]],["mingcalc",["mingcalc"]],["fluxapi",["vvebo"]],["javelin",["bqwz"]],["gpstool",["gps"]],["qiujing",["qiujingapp"]],["yz1018",["tv"]],["yz0320",["tv"]],["nuocha",["keep"]],["gerudo",["keep"]],["athena",["keep"]],["tophub",["tophub"]],["idaily",["tophub"]],["jvplay",["xjsm"]],["qmjyzc",["qmjyzc"]],["wohome",["wohome"]],["zhenti",["zhenti"]],["cfvip",["tv"]],["remai",["tophub"]],["vvebo",["vvebo"]],["cyljy",["cyljy"]],["feigo",["cyljy"]],["foday",["foday"]],["keep",["keep"]],["v2ex",["v2ex"]],["slzd",["slzd"]],["kyxq",["kyxq"]],["mhlz",["mhlz"]],["xjsm",["xjsm"]],["bqwz",["bqwz"]],["bxkt",["bxkt"]],["kada",["kada"]],["hhdd",["kada"]],["iapp",["iappdaily"]],["yzy",["tv"]],["qmj",["qmjyzc"]],["gps",["gps"]],["jsq",["mingcalc"]],["yz",["tv"]],["cf",["tv"]]];
-const PREFIX_KEYWORDS_BY_HEAD2={"ko":[["kouyuxingqiu",["kyxq"]]],"ba":[["banxueketang",["bxkt"]]],"io":[["iotpservice",["wohome"]]],"pi":[["picturebook",["ipalfish"]]],"th":[["theater-api",["sylangyue"]]],"fo":[["folidaymall",["foday"]],["foday",["foday"]]],"to":[["tophubdata",["tophub"]],["tophub",["tophub"]]],"ma":[["mandrillvr",["bqwz"]]],"qi":[["qiujingapp",["qiujingapp"]],["qiujing",["qiujingapp"]]],"ia":[["iappdaily",["iappdaily"]],["iapp",["iappdaily"]]],"sy":[["sylangyue",["sylangyue"]]],"yi":[["yizhilive",["qiujingapp"]]],"yz":[["yz250907",["tv"]],["yz1018",["tv"]],["yz0320",["tv"]],["yzy",["tv"]],["yz",["tv"]]],"go":[["gotokeep",["keep"]]],"li":[["lifeweek",["slzd"]]],"ha":[["haotgame",["qmjyzc"]]],"sm":[["smartont",["wohome"]]],"ip":[["ipalfish",["ipalfish"]]],"mi":[["mingcalc",["mingcalc"]]],"fl":[["fluxapi",["vvebo"]]],"ja":[["javelin",["bqwz"]]],"gp":[["gpstool",["gps"]],["gps",["gps"]]],"nu":[["nuocha",["keep"]]],"ge":[["gerudo",["keep"]]],"at":[["athena",["keep"]]],"id":[["idaily",["tophub"]]],"jv":[["jvplay",["xjsm"]]],"qm":[["qmjyzc",["qmjyzc"]],["qmj",["qmjyzc"]]],"wo":[["wohome",["wohome"]]],"zh":[["zhenti",["zhenti"]]],"cf":[["cfvip",["tv"]],["cf",["tv"]]],"re":[["remai",["tophub"]]],"vv":[["vvebo",["vvebo"]]],"cy":[["cyljy",["cyljy"]]],"fe":[["feigo",["cyljy"]]],"ke":[["keep",["keep"]]],"v2":[["v2ex",["v2ex"]]],"sl":[["slzd",["slzd"]]],"ky":[["kyxq",["kyxq"]]],"mh":[["mhlz",["mhlz"]]],"xj":[["xjsm",["xjsm"]]],"bq":[["bqwz",["bqwz"]]],"bx":[["bxkt",["bxkt"]]],"ka":[["kada",["kada"]]],"hh":[["hhdd",["kada"]]],"js":[["jsq",["mingcalc"]]]};
-const PREFIX_KEYWORDS_BY_HEAD1={};
+const PREFIX_SUFFIX_TRIE={"com":{"banxueketang":{"$":["bxkt"],"$m":"banxueketang.com"},"kouyuxingqiu":{"$":["kyxq"],"$m":"kouyuxingqiu.com"},"landintheair":{"$":["mhlz"],"$m":"landintheair.com"},"folidaymall":{"$":["foday"],"$m":"folidaymall.com"},"mandrillvr":{"$":["bqwz"],"$m":"mandrillvr.com"},"tophubdata":{"$":["tophub"],"$m":"tophubdata.com"},"lanfeitech":{"$":["xmbd"],"$m":"lanfeitech.com"},"baicizhan":{"$":["bohe"],"$m":"baicizhan.com"},"iappdaily":{"$":["iappdaily"],"$m":"iappdaily.com"},"yizhilive":{"$":["qiujingapp"],"$m":"yizhilive.com"},"gotokeep":{"$":["keep"],"$m":"gotokeep.com"},"haotgame":{"$":["qmjyzc"],"$m":"haotgame.com"},"iappdaiy":{"$":["tophub"],"$m":"iappdaiy.com"},"zoooy111":{"$":["zhenti"],"$m":"zoooy111.com"},"gpstool":{"$":["gps"],"$m":"gpstool.com"},"ipadown":{"$":["tophub"],"$m":"ipadown.com"},"hhdd":{"$":["kada"],"$m":"hhdd.com"},"v2ex":{"$":["v2ex"],"$m":"v2ex.com"}},"xyz":{"sylangyue":{"$":["sylangyue"],"$m":"sylangyue.xyz"}},"today":{"idaily":{"$":["tophub"],"$m":"idaily.today"},"remai":{"$":["tophub"],"$m":"remai.today"}},"net":{"smartont":{"$":["wohome"],"$m":"smartont.net"}},"cn":{"mingcalc":{"$":["mingcalc"],"$m":"mingcalc.cn"},"jvplay":{"$":["xjsm"],"$m":"jvplay.cn"}},"fun":{"feigo":{"$":["cyljy"],"$m":"feigo.fun"}},"cc":{"juyeye":{"$":["juyeye"],"$m":"juyeye.cc"}},"vip":{"vvebo":{"$":["vvebo"],"$m":"vvebo.vip"}}};
+const PREFIX_KEYWORDS_BY_HEAD2={"ko":[["kouyuxingqiu",["kyxq"]]],"ba":[["banxueketang",["bxkt"]]],"io":[["iotpservice",["wohome"]]],"th":[["theater-api",["sylangyue"]]],"fo":[["folidaymall",["foday"]],["foday",["foday"]]],"to":[["tophubdata",["tophub"]],["tophub",["tophub"]]],"ma":[["mandrillvr",["bqwz"]]],"qi":[["qiujingapp",["qiujingapp"]],["qiujing",["qiujingapp"]]],"ia":[["iappdaily",["iappdaily"]],["iapp",["iappdaily"]]],"sy":[["sylangyue",["sylangyue"]]],"yi":[["yizhilive",["qiujingapp"]]],"yz":[["yz250907",["tv"]],["yz1018",["tv"]],["yz0320",["tv"]],["yzy",["tv"]],["yz",["tv"]]],"go":[["gotokeep",["keep"]]],"ha":[["haotgame",["qmjyzc"]]],"sm":[["smartont",["wohome"]]],"mi":[["mingcalc",["mingcalc"]]],"fl":[["fluxapi",["vvebo"]]],"ja":[["javelin",["bqwz"]]],"gp":[["gpstool",["gps"]],["gps",["gps"]]],"nu":[["nuocha",["keep"]]],"ge":[["gerudo",["keep"]]],"at":[["athena",["keep"]]],"id":[["idaily",["tophub"]]],"jv":[["jvplay",["xjsm"]]],"qm":[["qmjyzc",["qmjyzc"]],["qmj",["qmjyzc"]]],"wo":[["wohome",["wohome"]]],"zh":[["zhenti",["zhenti"]]],"cf":[["cfvip",["tv"]],["cf",["tv"]]],"re":[["remai",["tophub"]]],"vv":[["vvebo",["vvebo"]]],"cy":[["cyljy",["cyljy"]]],"fe":[["feigo",["cyljy"]]],"ke":[["keep",["keep"]]],"v2":[["v2ex",["v2ex"]]],"ky":[["kyxq",["kyxq"]]],"mh":[["mhlz",["mhlz"]]],"xj":[["xjsm",["xjsm"]]],"bq":[["bqwz",["bqwz"]]],"bx":[["bxkt",["bxkt"]]],"ka":[["kada",["kada"]]],"hh":[["hhdd",["kada"]]],"js":[["jsq",["mingcalc"]]]};
 const HOST_MATCH_CACHE=new Map();
 const HOST_MATCH_CACHE_LIMIT=200;
 function hostCacheGet(h){if(!HOST_MATCH_CACHE.has(h))return undefined;const v=HOST_MATCH_CACHE.get(h);HOST_MATCH_CACHE.delete(h);HOST_MATCH_CACHE.set(h,v);return v}
 function hostCacheSet(h,v){if(HOST_MATCH_CACHE.has(h))HOST_MATCH_CACHE.delete(h);else if(HOST_MATCH_CACHE.size>=HOST_MATCH_CACHE_LIMIT){const k=HOST_MATCH_CACHE.keys().next().value;HOST_MATCH_CACHE.delete(k)}HOST_MATCH_CACHE.set(h,v)}
-function findBySuffixTrie(h){const parts=h.split(".").reverse();let node=PREFIX_SUFFIX_TRIE;let found=null;for(let i=0;i<parts.length;i++){const p=parts[i];if(!node[p])break;node=node[p];if(node.$)found={ids:node.$,method:"suffix",matched:parts.slice(0,i+1).reverse().join(".")}}return found}
-function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{out=findBySuffixTrie(h);if(!out){const seen2=new Set();for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2.has(k2))continue;seen2.add(k2);const bucket=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}if(!out){const seen1=new Set();for(let i=0;i<h.length;i++){const ch=h[i];if(ch==='.'||ch==='-'||ch==='_')continue;if(seen1.has(ch))continue;seen1.add(ch);const bucket=PREFIX_KEYWORDS_BY_HEAD1[ch];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}}hostCacheSet(h,out);return out}
+function findBySuffixTrie(h){const parts=h.split(".");let node=PREFIX_SUFFIX_TRIE;let found=null;for(let i=parts.length-1;i>=0;i--){const p=parts[i];node=node[p];if(!node)break;if(node.$)found={ids:node.$,method:"suffix",matched:node.$m}}return found}
+function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{out=findBySuffixTrie(h);if(!out){const seen2=new Set();for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2.has(k2))continue;seen2.add(k2);const bucket=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!bucket)continue;for(const[kw,ids]of bucket){if(kw.length<=2){const re=new RegExp('(^|[._-])'+kw+'([._-]|$)');if(re.test(h)){out={ids,method:'keyword',matched:kw};break}}else if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}hostCacheSet(h,out);return out}
 
 function _log(level, tag, msg) {
   if (typeof CONFIG === 'undefined' || !CONFIG.DEBUG) return;

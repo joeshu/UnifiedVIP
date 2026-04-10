@@ -54,10 +54,12 @@ function generatePrefixIndex() {
   };
 
   const allConfigs = getAllConfigs();
+  const registeredIds = new Set(Object.keys(allConfigs));
 
-  // 步骤1：复制手动维护的短关键字（唯一来源）
+  // 步骤1：复制手动维护的短关键字（仅保留已注册 app）
   for (const [kw, ids] of Object.entries(FORCED_KEYWORDS)) {
-    index.keyword[kw] = [...ids];
+    const filtered = (ids || []).filter(id => registeredIds.has(id));
+    if (filtered.length > 0) index.keyword[kw] = filtered;
   }
 
   // 步骤2：自动提取完整域名（仅用于 exact/suffix，绝不生成短关键字）
@@ -82,59 +84,45 @@ function generatePrefixIndex() {
       .replace(/\s+/g, ' ');
 
     // 提取域名候选：必须包含至少一个点，且符合域名规范
-    // 匹配模式：word.word.word（允许连字符）
     const candidates = cleaned.match(/[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z][a-zA-Z0-9.-]*/g) || [];
-    
+
     for (const candidate of candidates) {
       const domain = candidate.toLowerCase().trim();
-      
-      // 过滤标准：
-      // 1. 不能为空或太短
-      // 2. 不能包含协议名残留
-      // 3. 分割后每部分必须有效（非纯数字）
-      if (domain.length < 7) continue; // 最短如 a.b.c = 5字符，留余量
+
+      if (domain.length < 7) continue;
       if (domain.includes('http') || domain.includes('//')) continue;
-      
+
       const parts = domain.split('.').filter(p => {
         if (!p) return false;
-        if (/^\d+$/.test(p)) return false; // 排除纯数字（如IP片段）
-        if (p.length < 2) return false;    // 排除单字符
+        if (/^\d+$/.test(p)) return false;
+        if (p.length < 2) return false;
         return true;
       });
-      
+
       if (parts.length < 2) continue;
-      
-      // 验证TLD（顶级域）：必须是2-6个小写字母
+
       const tld = parts[parts.length - 1];
       if (!/^[a-z]{2,6}$/.test(tld)) continue;
-      
-      // 过滤常见API路径误识别为域名的情况
-      // 如：login.do, user.json, api.php 等
-      if (['do', 'json', 'php', 'asp', 'jsp', 'html', 'xml'].includes(tld)) continue;
-      
-      // 生成索引（仅 exact/suffix，绝不生成 keyword）
+
+      // 过滤常见路径后缀误识别
+      if (['do', 'json', 'php', 'asp', 'jsp', 'html', 'xml', 'ashx'].includes(tld)) continue;
+
       if (parts.length >= 3) {
-        // 三级域名 → exact（如 api.example.com）
         const fullDomain = parts.join('.');
         if (!index.exact[fullDomain]) index.exact[fullDomain] = [];
         if (!index.exact[fullDomain].includes(id)) index.exact[fullDomain].push(id);
-        
-        // 二级域名 → suffix（如 example.com）
+
         const suffix = parts.slice(-2).join('.');
         if (!index.suffix[suffix]) index.suffix[suffix] = [];
         if (!index.suffix[suffix].includes(id)) index.suffix[suffix].push(id);
-      } 
+      }
       else if (parts.length === 2) {
-        // 纯二级域名 → suffix（如 example.com）
         const suffixKey = parts.join('.');
         if (!index.suffix[suffixKey]) index.suffix[suffixKey] = [];
         if (!index.suffix[suffixKey].includes(id)) index.suffix[suffixKey].push(id);
       }
     }
   }
-
-  // 步骤3：清理重复的suffix（如果exact已存在，可优化查询路径）
-  // 此步骤可选，保持简单先不做
 
   return index;
 }

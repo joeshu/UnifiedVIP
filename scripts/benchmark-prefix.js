@@ -5,6 +5,33 @@ const fs = require('fs');
 const path = require('path');
 const { generatePrefixIndex } = require('../src/apps/_prefix-index');
 
+const PRESETS = {
+  fast: {
+    name: 'fast',
+    hostCount: 3000,
+    rounds: 3,
+    writeReport: false
+  },
+  full: {
+    name: 'full',
+    hostCount: 10000,
+    rounds: 6,
+    writeReport: true
+  }
+};
+
+function resolvePreset(argv) {
+  const args = Array.isArray(argv) ? argv : [];
+  const modeArg = args.find(arg => arg === '--fast' || arg === '--full' || arg.startsWith('--mode='));
+  if (modeArg === '--full') return PRESETS.full;
+  if (modeArg === '--fast') return PRESETS.fast;
+  if (modeArg && modeArg.startsWith('--mode=')) {
+    const name = modeArg.split('=')[1];
+    if (PRESETS[name]) return PRESETS[name];
+  }
+  return PRESETS.fast;
+}
+
 function baselineFactory(index) {
   const keywordEntries = Object.entries(index.keyword || {}).sort((a, b) => b[0].length - a[0].length);
   return function findByPrefixBaseline(hostname) {
@@ -168,19 +195,19 @@ function randomLabel(len = 8) {
   return s;
 }
 
-function makeHostData(index) {
+function makeHostData(index, hostCount = 10000) {
   const suffixes = Object.keys(index.suffix || {});
   const keywords = Object.keys(index.keyword || {});
 
   const repeated = [];
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < hostCount; i++) {
     const suffix = suffixes[i % Math.max(suffixes.length, 1)] || 'example.com';
     const kw = keywords[i % Math.max(keywords.length, 1)] || 'demo';
     repeated.push(`${kw}.${suffix}`);
   }
 
   const diverse = [];
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < hostCount; i++) {
     const suffix = suffixes[i % Math.max(suffixes.length, 1)] || 'example.com';
     const head = i % 3 === 0 ? randomLabel(10) : randomLabel(6);
     diverse.push(`${head}.${suffix}`);
@@ -229,26 +256,33 @@ function writeMarkdownReport(index, results) {
   return reportPath;
 }
 
+const preset = resolvePreset(process.argv.slice(2));
+
 console.log('=== Prefix Matching Benchmark ===');
+console.log(`mode: ${preset.name} (hosts=${preset.hostCount}, rounds=${preset.rounds})`);
 const index = generatePrefixIndex();
 const baseline = baselineFactory(index);
 const optimized = optimizedFactory(index);
-const { repeated, diverse } = makeHostData(index);
+const { repeated, diverse } = makeHostData(index, preset.hostCount);
 
 console.log(`index: exact=${Object.keys(index.exact).length}, suffix=${Object.keys(index.suffix).length}, keyword=${Object.keys(index.keyword).length}`);
 console.log('--- high-repeat hosts (cache friendly) ---');
-const repBase = bench('baseline', baseline, repeated, 6);
-const repOpt = bench('optimized', optimized, repeated, 6);
+const repBase = bench('baseline', baseline, repeated, preset.rounds);
+const repOpt = bench('optimized', optimized, repeated, preset.rounds);
 console.log(formatLine(repBase));
 console.log(formatLine(repOpt));
 console.log('--- diverse hosts (cache less friendly) ---');
-const divBase = bench('baseline', baseline, diverse, 6);
-const divOpt = bench('optimized', optimized, diverse, 6);
+const divBase = bench('baseline', baseline, diverse, preset.rounds);
+const divOpt = bench('optimized', optimized, diverse, preset.rounds);
 console.log(formatLine(divBase));
 console.log(formatLine(divOpt));
 
-const out = writeMarkdownReport(index, {
-  repeated: { baseline: repBase, optimized: repOpt },
-  diverse: { baseline: divBase, optimized: divOpt }
-});
-console.log(`\n📄 benchmark report: ${out}`);
+if (preset.writeReport) {
+  const out = writeMarkdownReport(index, {
+    repeated: { baseline: repBase, optimized: repOpt },
+    diverse: { baseline: divBase, optimized: divOpt }
+  });
+  console.log(`\n📄 benchmark report: ${out}`);
+} else {
+  console.log('\nℹ️ fast 模式不写 docs/benchmark-prefix.md；使用 --full 可生成完整报告');
+}

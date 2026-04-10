@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { getAllConfigs } = require('../src/apps/_index');
+const { getAllConfigs, scanConfigs } = require('../src/apps/_index');
 
 function classifyHost(host) {
   if (host.includes('*')) return 'wildcard';
@@ -29,6 +29,7 @@ function isQxSafeHost(host) {
 }
 
 function run() {
+  scanConfigs({ silent: false });
   const allConfigs = getAllConfigs();
   const errors = [];
   const warnings = [];
