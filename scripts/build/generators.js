@@ -104,6 +104,18 @@ function generatePrefixIndexCode(index) {
   const suffixEntries = Object.entries(index.suffix || {})
     .sort((a, b) => b[0].length - a[0].length);
 
+  // 构建反向后缀 trie：com.example -> ids
+  const suffixTrie = {};
+  suffixEntries.forEach(([suffix, ids]) => {
+    const parts = suffix.split('.').reverse();
+    let node = suffixTrie;
+    for (const p of parts) {
+      if (!node[p]) node[p] = {};
+      node = node[p];
+    }
+    node.$ = ids;
+  });
+
   const keywordEntries = Object.entries(index.keyword || {})
     .sort((a, b) => b[0].length - a[0].length);
 
@@ -123,6 +135,7 @@ function generatePrefixIndexCode(index) {
 
   lines.push('};');
   lines.push(`const PREFIX_SUFFIXES=${JSON.stringify(suffixEntries)};`);
+  lines.push(`const PREFIX_SUFFIX_TRIE=${JSON.stringify(suffixTrie)};`);
   lines.push(`const PREFIX_KEYWORDS=${JSON.stringify(keywordEntries)};`);
   lines.push(`const PREFIX_KEYWORDS_BY_HEAD2=${JSON.stringify(keywordBuckets2)};`);
   lines.push(`const PREFIX_KEYWORDS_BY_HEAD1=${JSON.stringify(keywordBuckets1)};`);
@@ -130,7 +143,8 @@ function generatePrefixIndexCode(index) {
   lines.push('const HOST_MATCH_CACHE_LIMIT=200;');
   lines.push('function hostCacheGet(h){if(!HOST_MATCH_CACHE.has(h))return undefined;const v=HOST_MATCH_CACHE.get(h);HOST_MATCH_CACHE.delete(h);HOST_MATCH_CACHE.set(h,v);return v}');
   lines.push('function hostCacheSet(h,v){if(HOST_MATCH_CACHE.has(h))HOST_MATCH_CACHE.delete(h);else if(HOST_MATCH_CACHE.size>=HOST_MATCH_CACHE_LIMIT){const k=HOST_MATCH_CACHE.keys().next().value;HOST_MATCH_CACHE.delete(k)}HOST_MATCH_CACHE.set(h,v)}');
-  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{for(const[suffix,ids]of PREFIX_SUFFIXES){if(h===suffix||h.endsWith('.'+suffix)){out={ids,method:'suffix',matched:suffix};break}}if(!out){const seen2=new Set();for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2.has(k2))continue;seen2.add(k2);const bucket=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}if(!out){const seen1=new Set();for(let i=0;i<h.length;i++){const ch=h[i];if(ch==='.'||ch==='-'||ch==='_')continue;if(seen1.has(ch))continue;seen1.add(ch);const bucket=PREFIX_KEYWORDS_BY_HEAD1[ch];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}}hostCacheSet(h,out);return out}`);
+  lines.push('function findBySuffixTrie(h){const parts=h.split(".").reverse();let node=PREFIX_SUFFIX_TRIE;let found=null;for(let i=0;i<parts.length;i++){const p=parts[i];if(!node[p])break;node=node[p];if(node.$)found={ids:node.$,method:"suffix",matched:parts.slice(0,i+1).reverse().join(".")}}return found}');
+  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{out=findBySuffixTrie(h);if(!out){const seen2=new Set();for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2.has(k2))continue;seen2.add(k2);const bucket=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}if(!out){const seen1=new Set();for(let i=0;i<h.length;i++){const ch=h[i];if(ch==='.'||ch==='-'||ch==='_')continue;if(seen1.has(ch))continue;seen1.add(ch);const bucket=PREFIX_KEYWORDS_BY_HEAD1[ch];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}}hostCacheSet(h,out);return out}`);
   return lines.join('\n');
 }
 
