@@ -101,12 +101,28 @@ function generatePrefixIndexCode(index) {
     emitGroup('keyword', index.keyword || {}, false);
   }
 
+  const suffixEntries = Object.entries(index.suffix || {})
+    .sort((a, b) => b[0].length - a[0].length);
+
   const keywordEntries = Object.entries(index.keyword || {})
     .sort((a, b) => b[0].length - a[0].length);
 
+  const keywordBuckets = {};
+  keywordEntries.forEach(([kw, ids]) => {
+    const head = kw[0] || '#';
+    if (!keywordBuckets[head]) keywordBuckets[head] = [];
+    keywordBuckets[head].push([kw, ids]);
+  });
+
   lines.push('};');
+  lines.push(`const PREFIX_SUFFIXES=${JSON.stringify(suffixEntries)};`);
   lines.push(`const PREFIX_KEYWORDS=${JSON.stringify(keywordEntries)};`);
-  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();if(PREFIX_INDEX.exact[h])return{ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};for(const[suffix,ids]of Object.entries(PREFIX_INDEX.suffix))if(h.endsWith('.'+suffix)||h===suffix)return{ids,method:'suffix',matched:suffix};for(const[kw,ids]of PREFIX_KEYWORDS)if(h.includes(kw))return{ids,method:'keyword',matched:kw};return null}`);
+  lines.push(`const PREFIX_KEYWORDS_BY_HEAD=${JSON.stringify(keywordBuckets)};`);
+  lines.push('const HOST_MATCH_CACHE=new Map();');
+  lines.push('const HOST_MATCH_CACHE_LIMIT=200;');
+  lines.push('function hostCacheGet(h){return HOST_MATCH_CACHE.has(h)?HOST_MATCH_CACHE.get(h):undefined}');
+  lines.push('function hostCacheSet(h,v){if(HOST_MATCH_CACHE.size>=HOST_MATCH_CACHE_LIMIT){const k=HOST_MATCH_CACHE.keys().next().value;HOST_MATCH_CACHE.delete(k)}HOST_MATCH_CACHE.set(h,v)}');
+  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{for(const[suffix,ids]of PREFIX_SUFFIXES){if(h===suffix||h.endsWith('.'+suffix)){out={ids,method:'suffix',matched:suffix};break}}if(!out){const seenHeads=new Set();for(let i=0;i<h.length;i++){const ch=h[i];if(ch==='.'||ch==='-'||ch==='_')continue;if(seenHeads.has(ch))continue;seenHeads.add(ch);const bucket=PREFIX_KEYWORDS_BY_HEAD[ch];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}hostCacheSet(h,out);return out}`);
   return lines.join('\n');
 }
 
