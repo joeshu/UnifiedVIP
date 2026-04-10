@@ -4,10 +4,13 @@ name: Build and Deploy
 on:
   push:
     branches: [main, master]
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
   pages: write
   id-token: write
 
@@ -30,8 +33,30 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Validate configs
+        run: npm run validate
+
+      - name: MITM checks
+        run: npm run check:mitm
+
       - name: Build
         run: npm run build
+
+      - name: MITM host diff (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git show origin/${{ github.base_ref }}:dist/rewrite.conf > /tmp/rewrite.before.conf || true
+          if [ -s /tmp/rewrite.before.conf ]; then
+            node scripts/diff-mitm.js /tmp/rewrite.before.conf dist/rewrite.conf | tee /tmp/mitm-diff.md
+            {
+              echo "### MITM Host Diff"
+              echo
+              cat /tmp/mitm-diff.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Base dist/rewrite.conf not found, skip MITM diff" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Verify dist contents
         run: |
