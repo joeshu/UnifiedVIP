@@ -1,0 +1,5 @@
+# 观测到的动态 host（QX-safe 精确域名优先）
+# 一行一个，支持注释行(#)和空行
+# 示例：
+# yz1018.example.com
+# cfvip.abc123.com

@@ -173,6 +173,7 @@ function isQxSafeMitmHost(host) {
 
 function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR }) {
   const autoHostSet = new Set();
+  const observedHostSet = new Set();
   
   // 从 APP_REGISTRY 提取 hostname
   for (const cfg of Object.values(APP_REGISTRY)) {
@@ -204,10 +205,53 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     'yzy0916.*.com','yz1018.*.com','yz250907.*.com','yz0320.*.com','cfvip.*.com','yr-game-api.feigo.fun','star.jvplay.cn','iotpservice.smartont.net'
   ];
 
-  const hostnames = Array.from(new Set([...manualHosts, ...Array.from(autoHostSet)]))
-    .map(h => String(h || '').trim())
+  // 从规则文件读取观测到的动态域名（仅 QX-safe 会生效）
+  const observedHostsPath = path.join(RULES_DIR, 'mitm-observed.txt');
+  if (fs.existsSync(observedHostsPath)) {
+    const observedHosts = fs.readFileSync(observedHostsPath, 'utf8')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s && !s.startsWith('#'));
+    for (const h of observedHosts) observedHostSet.add(h);
+  }
+
+  const allCandidateHosts = Array.from(new Set([
+    ...manualHosts,
+    ...Array.from(autoHostSet),
+    ...Array.from(observedHostSet)
+  ])).map(h => String(h || '').trim()).filter(Boolean);
+
+  const hostnames = allCandidateHosts
     .filter(h => h && isQxSafeMitmHost(h))
     .sort();
+
+  const filteredOutHosts = allCandidateHosts
+    .filter(h => h && !isQxSafeMitmHost(h))
+    .sort();
+
+  const reportPath = path.join(RULES_DIR, '../dist/mitm-filter-report.md');
+  const report = [
+    '# MITM 过滤报告',
+    '',
+    `- 总候选: ${allCandidateHosts.length}`,
+    `- QX-safe 保留: ${hostnames.length}`,
+    `- 过滤掉: ${filteredOutHosts.length}`,
+    ''
+  ];
+  if (observedHostSet.size > 0) {
+    report.push(`- 观测文件命中: ${observedHostSet.size}`);
+    report.push('');
+  }
+  if (filteredOutHosts.length > 0) {
+    report.push('## 被过滤的 hosts');
+    report.push('');
+    filteredOutHosts.forEach(h => report.push(`- ${h}`));
+  } else {
+    report.push('## 被过滤的 hosts');
+    report.push('');
+    report.push('- (无)');
+  }
+  fs.writeFileSync(reportPath, report.join('\n'));
   let conf = `# Unified VIP Unlock Manager v${BUILD_CONFIG.VERSION}\n# 构建时间: ${new Date().toISOString()}\n# APP数量: ${Object.keys(APP_REGISTRY).length}\n\n[rewrite_local]\n\n`;
 
   // 获取完整配置（用于显示名称）
