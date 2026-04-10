@@ -1,5 +1,8 @@
 {
   "urlPattern": "^https?:\\/\\/gateway-api\\.yizhilive\\.com\\/api\\/(?:v2\\/index\\/carouses\\/(?:3|6|8|11)|v3\\/index\\/all)",
+  "mitmHosts": [
+    "gateway-api.yizhilive.com"
+  ],
   "id": "qiujingapp",
   "name": "球竞APP",
   "mode": "json",

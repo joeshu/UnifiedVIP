@@ -20,6 +20,6 @@
     "release:beta": "npm version prerelease --preid=beta && git push && git push --tags"
   },
   "devDependencies": {
-    "ajv": "^8.17.1"
+    "ajv": "^8.18.0"
   }
 }

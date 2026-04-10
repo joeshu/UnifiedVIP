@@ -1,5 +1,9 @@
 {
   "urlPattern": "^https?:\\/\\/(?:www\\.)?55[a-z0-9]+\\.shop\\/.*",
+  "mitmHosts": [
+    "55d6b4o1m2.shop",
+    "www.55d6b4o1m2.shop"
+  ],
   "name": "555电影去广告",
   "mode": "html",
   "priority": 30,

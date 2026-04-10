@@ -1,5 +1,10 @@
 {
   "urlPattern": "^https?:\\/\\/(?:api|kit)\\.gotokeep\\.com\\/(?:nuocha|gerudo|athena|nuocha\\/plans|suit\\/v5\\/smart|kprime\\/v4\\/suit\\/sales)\\/",
+  "mitmHosts": [
+    "api.gotokeep.com",
+    "kit.gotokeep.com",
+    "*.gotokeep.*"
+  ],
   "id": "keep",
   "name": "Keep",
   "mode": "regex",

@@ -164,12 +164,18 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     if (host) autoHostSet.add(host);
   }
   
-  // 从所有配置（包括纯 JSON 配置）提取 hostname
+  // 从所有配置（包括纯 JSON 配置）提取 hostname + 显式 mitmHosts
   let allConfigs = {};
   try { allConfigs = getAllConfigs(); } catch (e) {}
   for (const cfg of Object.values(allConfigs)) {
     const host = extractHostname(cfg?.urlPattern);
     if (host) autoHostSet.add(host);
+
+    if (Array.isArray(cfg?.mitmHosts)) {
+      for (const h of cfg.mitmHosts) {
+        if (typeof h === 'string' && h.trim()) autoHostSet.add(h.trim());
+      }
+    }
   }
 
   const manualHosts = [

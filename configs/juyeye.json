@@ -1,5 +1,9 @@
 {
   "urlPattern": "^https?:\\/\\/(?:www\\.)?juyeye\\.cc\\/.*",
+  "mitmHosts": [
+    "juyeye.cc",
+    "*.juyeye.cc"
+  ],
   "name": "剧爷爷去广告",
   "mode": "html",
   "htmlMarkers": [

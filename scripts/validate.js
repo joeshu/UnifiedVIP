@@ -22,6 +22,10 @@ const baseSchema = {
     name: { type: 'string', minLength: 1 },
     mode: { type: 'string', enum: [...VALID_MODES] },
     urlPattern: { type: 'string', minLength: 1 },
+    mitmHosts: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 }
+    },
     processor: {},
     regexReplacements: { type: 'array' },
     forwardUrl: { type: 'string', minLength: 1 },
@@ -85,7 +89,19 @@ function validateConfigByMode(id, cfg, errors) {
   }
 }
 
-function validateConfigs(errors) {
+function isComplexUrlPattern(pattern) {
+  if (!pattern || typeof pattern !== 'string') return false;
+  return /\(\?:|\|/.test(pattern);
+}
+
+function validateMitmHints(id, cfg, warnings) {
+  const hasMitmHosts = Array.isArray(cfg.mitmHosts) && cfg.mitmHosts.length > 0;
+  if (!hasMitmHosts && isComplexUrlPattern(cfg.urlPattern)) {
+    warnings.push(`${id}: urlPattern 含分组/分支，建议显式提供 mitmHosts 以避免 [mitm] 漏配`);
+  }
+}
+
+function validateConfigs(errors, warnings) {
   const allConfigs = getAllConfigs();
   const validateSchema = ajv.compile(baseSchema);
 
@@ -114,6 +130,7 @@ function validateConfigs(errors) {
     }
 
     validateConfigByMode(id, cfg, errors);
+    validateMitmHints(id, cfg, warnings);
   }
 
   return allConfigs;
@@ -123,12 +140,13 @@ function validate() {
   console.log('🔍 验证配置...\n');
 
   const errors = [];
+  const warnings = [];
 
   // 1) 检查 APP_REGISTRY（只校验其职责字段：urlPattern）
   validateRegistry(errors);
 
   // 2) 检查完整配置（由 getAllConfigs 生成）
-  const allConfigs = validateConfigs(errors);
+  const allConfigs = validateConfigs(errors, warnings);
 
   // 3) 检查重复 ID
   const ids = Object.keys(APP_REGISTRY);
@@ -152,11 +170,20 @@ function validate() {
       console.log(`     ${m}: ${c}`);
     });
 
+    if (warnings.length > 0) {
+      console.log(`\n⚠️  警告 ${warnings.length} 项:`);
+      warnings.forEach(w => console.log(`   - ${w}`));
+    }
+
     return 0;
   }
 
   console.log(`❌ 发现 ${errors.length} 个错误:\n`);
   errors.forEach(e => console.log(`   - ${e}`));
+  if (warnings.length > 0) {
+    console.log(`\n⚠️  另有警告 ${warnings.length} 项:`);
+    warnings.forEach(w => console.log(`   - ${w}`));
+  }
   return 1;
 }
 
