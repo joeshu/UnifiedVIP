@@ -19,5 +19,8 @@
         }
       }
     }
-  }
+  },
+  "mitmHosts": [
+    "ss.landintheair.com"
+  ]
 }

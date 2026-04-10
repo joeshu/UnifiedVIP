@@ -14,5 +14,8 @@
         "data.total_coins": 999999
       }
     }
-  }
+  },
+  "mitmHosts": [
+    "api.iappdaily.com"
+  ]
 }

@@ -16,5 +16,8 @@
         "data.group_vip_expire_date": 20999999
       }
     }
-  }
+  },
+  "mitmHosts": [
+    "service.gpstool.com"
+  ]
 }

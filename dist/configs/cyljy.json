@@ -8,5 +8,8 @@
       "field": "coin",
       "value": 999988800
     }
+  ],
+  "mitmHosts": [
+    "yr-game-api.feigo.fun"
   ]
 }

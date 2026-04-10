@@ -15,5 +15,8 @@
       ],
       "keyField": "componentCode"
     }
-  }
+  },
+  "mitmHosts": [
+    "apis.folidaymall.com"
+  ]
 }

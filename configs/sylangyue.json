@@ -14,5 +14,8 @@
         "data.beans": 999880
       }
     }
-  }
+  },
+  "mitmHosts": [
+    "theater-api.sylangyue.xyz"
+  ]
 }

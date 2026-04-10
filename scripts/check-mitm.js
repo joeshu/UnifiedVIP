@@ -2,45 +2,6 @@
 
 const { getAllConfigs } = require('../src/apps/_index');
 
-function extractHostname(pattern) {
-  if (!pattern || typeof pattern !== 'string') return null;
-
-  // 先尝试直接从模式里提取第一个可识别域名片段（支持转义点号）
-  const token = pattern.match(/[a-z0-9-]+(?:\\\.[a-z0-9-]+)+/i);
-  if (token && token[0]) {
-    const host = token[0].replace(/\\\./g, '.').toLowerCase();
-    if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) return host;
-  }
-
-  // 回退到旧逻辑
-  let cleaned = pattern
-    .replace(/^\^/, '')
-    .replace(/\$$/, '')
-    .replace(/^https\?\:/, '')
-    .replace(/^https\:/, '')
-    .replace(/^http\:/, '');
-
-  cleaned = cleaned.replace(/\\\//g, '/');
-  if (cleaned.startsWith('//')) cleaned = cleaned.slice(2);
-
-  const slashIdx = cleaned.indexOf('/');
-  if (slashIdx > 0) cleaned = cleaned.slice(0, slashIdx);
-
-  cleaned = cleaned.replace(/^\(\?:www\.\)\?/, '');
-  cleaned = cleaned.replace(/^www\./, '');
-  cleaned = cleaned.replace(/\\\./g, '.');
-
-  if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(cleaned)) {
-    return cleaned.toLowerCase();
-  }
-  return null;
-}
-
-function isComplexUrlPattern(pattern) {
-  if (!pattern || typeof pattern !== 'string') return false;
-  return /\(\?:|\|/.test(pattern);
-}
-
 function classifyHost(host) {
   if (host.includes('*')) return 'wildcard';
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return 'ipv4';
@@ -76,15 +37,11 @@ function run() {
     const explicitHosts = Array.isArray(cfg.mitmHosts)
       ? cfg.mitmHosts.filter(h => typeof h === 'string' && h.trim()).map(h => h.trim())
       : [];
-    const autoHost = extractHostname(cfg.urlPattern);
-    const mitmOptional = cfg.mitmOptional === true;
 
-    if (!mitmOptional && explicitHosts.length === 0 && !autoHost) {
-      errors.push(`${id}: 无法从 urlPattern 提取 hostname，且未配置 mitmHosts`);
-    }
-
-    if (!mitmOptional && isComplexUrlPattern(cfg.urlPattern) && explicitHosts.length === 0) {
-      errors.push(`${id}: 复杂 urlPattern 必须显式配置 mitmHosts`);
+    // 全量显式：每个配置都必须包含 mitmHosts 字段（可为空数组）
+    if (!Array.isArray(cfg.mitmHosts)) {
+      errors.push(`${id}: 缺少显式 mitmHosts 字段（要求全量显式）`);
+      continue;
     }
 
     explicitHosts.forEach(h => {
@@ -112,7 +69,7 @@ function run() {
     warnings.push(`发现重复 mitmHosts: ${Array.from(duplicateHosts).join(', ')}`);
   }
 
-  console.log('🔍 MITM 专项检查');
+  console.log('🔍 MITM 专项检查（全量显式）');
   console.log(`   配置数: ${Object.keys(allConfigs).length}`);
   console.log(`   显式 mitmHosts 统计: domain=${hostStats.domain}, wildcard=${hostStats.wildcard}, ipv4=${hostStats.ipv4}, unknown=${hostStats.unknown}`);
 

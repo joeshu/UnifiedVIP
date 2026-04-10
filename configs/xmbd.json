@@ -15,5 +15,8 @@
       "replacement": "\"zuanShi\":9999",
       "flags": "g"
     }
+  ],
+  "mitmHosts": [
+    "wx-bingdu.lanfeitech.com"
   ]
 }

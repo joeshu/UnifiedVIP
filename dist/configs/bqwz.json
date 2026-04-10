@@ -16,5 +16,8 @@
       "field": "exp",
       "value": 9999880
     }
+  ],
+  "mitmHosts": [
+    "javelin.mandrillvr.com"
   ]
 }

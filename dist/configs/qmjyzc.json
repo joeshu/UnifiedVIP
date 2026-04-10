@@ -30,5 +30,8 @@
         }
       ]
     }
-  }
+  },
+  "mitmHosts": [
+    "res5.haotgame.com"
+  ]
 }

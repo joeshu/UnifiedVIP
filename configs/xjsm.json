@@ -37,5 +37,8 @@
         }
       ]
     }
-  }
+  },
+  "mitmHosts": [
+    "star.jvplay.cn"
+  ]
 }

@@ -79,5 +79,8 @@
         }
       ]
     }
-  }
+  },
+  "mitmHosts": [
+    "service.hhdd.com"
+  ]
 }

@@ -29,5 +29,8 @@
         "data.expireTimestamp": 4102358400
       }
     }
-  }
+  },
+  "mitmHosts": [
+    "du.baicizhan.com"
+  ]
 }

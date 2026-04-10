@@ -12,5 +12,8 @@
         "data.configList"
       ]
     }
-  }
+  },
+  "mitmHosts": [
+    "iotpservice.smartont.net"
+  ]
 }

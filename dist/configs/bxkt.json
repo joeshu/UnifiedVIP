@@ -47,5 +47,8 @@
       "replacement": "\"isVip\":true",
       "flags": "g"
     }
+  ],
+  "mitmHosts": [
+    "api.banxueketang.com"
   ]
 }

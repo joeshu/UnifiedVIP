@@ -12,5 +12,8 @@
         "result.VipEndDes": "永久会员"
       }
     }
-  }
+  },
+  "mitmHosts": [
+    "jsq.mingcalc.cn"
+  ]
 }
