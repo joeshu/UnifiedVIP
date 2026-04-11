@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-04-11T04:45:39.564Z
+ * 构建时间: 2026-04-11T05:01:33.550Z
  * APP数量: 25
  * ==========================================
  *
@@ -719,7 +719,7 @@ function createProcessorFactory(requestId) {
       if (steps.length > maxSteps) {
         throw new Error(`Too many processors: ${steps.length}`);
       }
-      const processors = steps.map(step => compile(step));
+      const processors = steps.map(step => compile(step)).filter(Boolean);
 
       return (obj, env) => {
         let result = obj;
@@ -752,7 +752,7 @@ function createProcessorFactory(requestId) {
       const scenes = (params.scenes || []).map(s => ({
         matchFn: makeConditionMatcher(s || {}),
         then: compile(s.then)
-      }));
+      })).filter(scene => typeof scene.then === 'function');
 
       return (obj, env) => {
         for (const scene of scenes) {
@@ -766,13 +766,24 @@ function createProcessorFactory(requestId) {
   };
 }
 
+function stableStringify(value) {
+  if (value == null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(stableStringify).join(',') + ']';
+  }
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
+}
+
 function createCompiler(factory) {
   const cache = new Map();
 
   return function compileProcessor(def) {
     if (!def || !def.processor) return null;
 
-    const cacheKey = Utils.simpleHash(Utils.safeJsonStringify(def));
+    const cacheKey = Utils.simpleHash(stableStringify(def));
     if (cache.has(cacheKey)) {
       return cache.get(cacheKey);
     }
@@ -780,7 +791,7 @@ function createCompiler(factory) {
     const processorFactory = factory[def.processor];
     if (!processorFactory) return null;
 
-    const processor = processorFactory(def.params, compileProcessor);
+    const processor = processorFactory(def.params || {}, compileProcessor);
     if (processor) cache.set(cacheKey, processor);
     return processor;
   };

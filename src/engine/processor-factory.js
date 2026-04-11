@@ -273,7 +273,7 @@ function createProcessorFactory(requestId) {
       if (steps.length > maxSteps) {
         throw new Error(`Too many processors: ${steps.length}`);
       }
-      const processors = steps.map(step => compile(step));
+      const processors = steps.map(step => compile(step)).filter(Boolean);
 
       return (obj, env) => {
         let result = obj;
@@ -306,7 +306,7 @@ function createProcessorFactory(requestId) {
       const scenes = (params.scenes || []).map(s => ({
         matchFn: makeConditionMatcher(s || {}),
         then: compile(s.then)
-      }));
+      })).filter(scene => typeof scene.then === 'function');
 
       return (obj, env) => {
         for (const scene of scenes) {
