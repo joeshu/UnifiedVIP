@@ -42,6 +42,22 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: MITM summary (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git show origin/${{ github.base_ref }}:dist/rewrite.conf > /tmp/rewrite.before.conf || true
+          if [ -s /tmp/rewrite.before.conf ]; then
+            node scripts/diff-mitm-summary.js /tmp/rewrite.before.conf dist/rewrite.conf dist/mitm-filter-report.md | tee /tmp/mitm-summary.md
+            {
+              echo "### MITM Summary"
+              echo
+              cat /tmp/mitm-summary.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Base dist/rewrite.conf not found, skip MITM summary" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: MITM host diff (PR)
         if: github.event_name == 'pull_request'
         run: |

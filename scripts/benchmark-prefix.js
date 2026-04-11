@@ -54,8 +54,10 @@ function optimizedFactory(index) {
   for (const [kw, ids] of keywordEntries) {
     const k2 = kw.slice(0, 2);
     if (k2.length < 2) continue;
-    if (!keywordBuckets2[k2]) keywordBuckets2[k2] = [];
-    keywordBuckets2[k2].push([kw, ids]);
+    if (!keywordBuckets2[k2]) keywordBuckets2[k2] = {};
+    const lenKey = String(kw.length);
+    if (!keywordBuckets2[k2][lenKey]) keywordBuckets2[k2][lenKey] = [];
+    keywordBuckets2[k2][lenKey].push([kw, ids]);
   }
 
   const cache = new Map();
@@ -105,13 +107,18 @@ function optimizedFactory(index) {
           const k2 = a + b;
           if (seen2[k2]) continue;
           seen2[k2] = 1;
-          const bucket = keywordBuckets2[k2];
-          if (!bucket) continue;
-          for (const [kw, ids] of bucket) {
-            if (h.includes(kw)) {
-              out = { ids, method: 'keyword', matched: kw };
-              break;
+          const grouped = keywordBuckets2[k2];
+          if (!grouped) continue;
+          const lens = Object.keys(grouped).sort((x, y) => Number(y) - Number(x));
+          for (const lenKey of lens) {
+            if (Number(lenKey) > h.length) continue;
+            for (const [kw, ids] of grouped[lenKey]) {
+              if (h.includes(kw)) {
+                out = { ids, method: 'keyword', matched: kw };
+                break;
+              }
             }
+            if (out) break;
           }
           if (out) break;
         }

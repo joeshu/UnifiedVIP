@@ -125,8 +125,10 @@ function generatePrefixIndexCode(index) {
   keywordEntries.forEach(([kw, ids]) => {
     const k2 = (kw || '').slice(0, 2);
     if (k2.length < 2) return;
-    if (!keywordBuckets2[k2]) keywordBuckets2[k2] = [];
-    keywordBuckets2[k2].push([kw, ids]);
+    if (!keywordBuckets2[k2]) keywordBuckets2[k2] = {};
+    const lenKey = String(kw.length);
+    if (!keywordBuckets2[k2][lenKey]) keywordBuckets2[k2][lenKey] = [];
+    keywordBuckets2[k2][lenKey].push([kw, ids]);
   });
 
   lines.push('};');
@@ -136,7 +138,7 @@ function generatePrefixIndexCode(index) {
   lines.push('function hostCacheGet(h){if(!HOST_MATCH_CACHE.has(h))return undefined;const v=HOST_MATCH_CACHE.get(h);HOST_MATCH_CACHE.delete(h);HOST_MATCH_CACHE.set(h,v);return v}');
   lines.push('function hostCacheSet(h,v){if(HOST_MATCH_CACHE.has(h))HOST_MATCH_CACHE.delete(h);else if(HOST_MATCH_CACHE.size>=HOST_MATCH_CACHE_LIMIT){const k=HOST_MATCH_CACHE.keys().next().value;HOST_MATCH_CACHE.delete(k)}HOST_MATCH_CACHE.set(h,v)}');
   lines.push('function findBySuffixFast(h){const lastDot=h.lastIndexOf(".");if(lastDot<=0||lastDot>=h.length-1)return null;const prevDot=h.lastIndexOf(".",lastDot-1);const suffix=prevDot>=0?h.slice(prevDot+1):h;const ids=PREFIX_INDEX.suffix[suffix];return ids?{ids,method:"suffix",matched:suffix}:null}');
-  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{out=findBySuffixFast(h);if(!out){const seen2=Object.create(null);for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2[k2])continue;seen2[k2]=1;const bucket=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!bucket)continue;for(const[kw,ids]of bucket){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}}}hostCacheSet(h,out);return out}`);
+  lines.push(`function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{out=findBySuffixFast(h);if(!out){const seen2=Object.create(null);for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2[k2])continue;seen2[k2]=1;const grouped=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!grouped)continue;const lens=Object.keys(grouped).sort((x,y)=>Number(y)-Number(x));for(const lenKey of lens){if(Number(lenKey)>h.length)continue;for(const[kw,ids]of grouped[lenKey]){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}if(out)break}}}hostCacheSet(h,out);return out}`);
   return lines.join('\n');
 }
 
@@ -207,11 +209,23 @@ function isQxSafeMitmHost(host) {
 function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR }) {
   const autoHostSet = new Set();
   const observedHostSet = new Set();
+  const hostSourceMap = new Map();
+  
+  function addHostWithSource(host, source) {
+    const h = String(host || '').trim();
+    if (!h) return;
+    const prev = hostSourceMap.get(h);
+    if (!prev) hostSourceMap.set(h, source);
+    else if (!prev.split(' + ').includes(source)) hostSourceMap.set(h, `${prev} + ${source}`);
+  }
   
   // 从 APP_REGISTRY 提取 hostname
   for (const cfg of Object.values(APP_REGISTRY)) {
     const host = extractHostname(cfg?.urlPattern);
-    if (host) autoHostSet.add(host);
+    if (host) {
+      autoHostSet.add(host);
+      addHostWithSource(host, 'auto:urlPattern');
+    }
   }
   
   // 从所有配置（包括纯 JSON 配置）提取 hostname + 显式 mitmHosts
@@ -219,11 +233,18 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
   try { allConfigs = getAllConfigs(); } catch (e) {}
   for (const cfg of Object.values(allConfigs)) {
     const host = extractHostname(cfg?.urlPattern);
-    if (host) autoHostSet.add(host);
+    if (host) {
+      autoHostSet.add(host);
+      addHostWithSource(host, 'auto:urlPattern');
+    }
 
     if (Array.isArray(cfg?.mitmHosts)) {
       for (const h of cfg.mitmHosts) {
-        if (typeof h === 'string' && h.trim()) autoHostSet.add(h.trim());
+        if (typeof h === 'string' && h.trim()) {
+          const normalized = h.trim();
+          autoHostSet.add(normalized);
+          addHostWithSource(normalized, 'config:mitmHosts');
+        }
       }
     }
   }
@@ -237,6 +258,7 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     '*.gotokeep.*','120.53.74.*','162.14.5.*','42.187.199.*','101.42.124.*','javelin.mandrillvr.com','api.banxueketang.com',
     'yzy0916.*.com','yz1018.*.com','yz250907.*.com','yz0320.*.com','cfvip.*.com','yr-game-api.feigo.fun','star.jvplay.cn','iotpservice.smartont.net'
   ];
+  manualHosts.forEach(h => addHostWithSource(h, 'manual:list'));
 
   // 从规则文件读取观测到的动态域名（仅 QX-safe 会生效）
   const observedHostsPath = path.join(RULES_DIR, 'mitm-observed.txt');
@@ -245,7 +267,10 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
       .split('\n')
       .map(s => s.trim())
       .filter(s => s && !s.startsWith('#'));
-    for (const h of observedHosts) observedHostSet.add(h);
+    for (const h of observedHosts) {
+      observedHostSet.add(h);
+      addHostWithSource(h, 'observed:file');
+    }
   }
 
   const allCandidateHosts = Array.from(new Set([
@@ -275,10 +300,16 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     report.push(`- 观测文件命中: ${observedHostSet.size}`);
     report.push('');
   }
+  report.push('## Host 来源摘要');
+  report.push('');
+  report.push('| Host | Source |');
+  report.push('| --- | --- |');
+  hostnames.forEach(h => report.push(`| ${h} | ${hostSourceMap.get(h) || 'unknown'} |`));
+  report.push('');
   if (filteredOutHosts.length > 0) {
     report.push('## 被过滤的 hosts');
     report.push('');
-    filteredOutHosts.forEach(h => report.push(`- ${h}`));
+    filteredOutHosts.forEach(h => report.push(`- ${h}${hostSourceMap.get(h) ? ` ← ${hostSourceMap.get(h)}` : ''}`));
   } else {
     report.push('## 被过滤的 hosts');
     report.push('');

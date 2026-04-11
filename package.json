@@ -8,6 +8,7 @@
     "validate": "node scripts/validate.js",
     "check:mitm": "node scripts/check-mitm.js",
     "mitm:append": "node scripts/append-mitm-observed.js",
+    "mitm:normalize": "node scripts/normalize-mitm-hosts.js",
     "benchmark:prefix": "node scripts/benchmark-prefix.js --fast",
     "benchmark:prefix:fast": "node scripts/benchmark-prefix.js --fast",
     "benchmark:prefix:full": "node scripts/benchmark-prefix.js --full",

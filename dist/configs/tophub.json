@@ -1,18 +1,18 @@
 {
   "urlPattern": "^https:\\/\\/(?:api[23]\\.tophub\\.(?:xyz|today|app)|tophub(?:2)?\\.(?:tophubdata\\.com|idaily\\.today|remai\\.today|iappdaiy\\.com|ipadown\\.com))\\/account\\/sync",
   "mitmHosts": [
-    "api2.tophub.today",
     "api2.tophub.app",
-    "api3.tophub.xyz",
-    "api3.tophub.today",
+    "api2.tophub.today",
     "api3.tophub.app",
-    "tophub.tophubdata.com",
-    "tophub2.tophubdata.com",
-    "tophub.idaily.today",
-    "tophub2.idaily.today",
-    "tophub.remai.today",
+    "api3.tophub.today",
+    "api3.tophub.xyz",
     "tophub.iappdaiy.com",
-    "tophub.ipadown.com"
+    "tophub.idaily.today",
+    "tophub.ipadown.com",
+    "tophub.remai.today",
+    "tophub.tophubdata.com",
+    "tophub2.idaily.today",
+    "tophub2.tophubdata.com"
   ],
   "id": "tophub",
   "name": "TopHub",
