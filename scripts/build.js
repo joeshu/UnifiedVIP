@@ -325,13 +325,25 @@ function build() {
 
   const rewritePath = path.join(DIST_DIR, 'rewrite.conf');
   fs.writeFileSync(rewritePath, BuildGenerators.generateRewriteConf({
-    BUILD_CONFIG,
+    BUILD_CONFIG: productionConfig,
     APP_REGISTRY,
     getAllConfigs,
-    RULES_DIR
+    RULES_DIR,
+    scriptFilename: 'Unified_VIP_Unlock_Manager_v22.js'
   }));
   const rewriteSize = (fs.statSync(rewritePath).size / 1024).toFixed(2);
   console.log(`   ✅ rewrite.conf (${rewriteSize} KB)`);
+
+  const rewriteDebugPath = path.join(DIST_DIR, 'rewrite.debug.conf');
+  fs.writeFileSync(rewriteDebugPath, BuildGenerators.generateRewriteConf({
+    BUILD_CONFIG: debugConfig,
+    APP_REGISTRY,
+    getAllConfigs,
+    RULES_DIR,
+    scriptFilename: 'Unified_VIP_Unlock_Manager_v22.debug.js'
+  }));
+  const rewriteDebugSize = (fs.statSync(rewriteDebugPath).size / 1024).toFixed(2);
+  console.log(`   ✅ rewrite.debug.conf (${rewriteDebugSize} KB)`);
 
   const bench = spawnSync(process.execPath, [path.join(__dirname, 'benchmark-prefix.js'), '--full'], {
     cwd: path.join(__dirname, '..'),
@@ -356,6 +368,7 @@ function build() {
   const configCount = fs.readdirSync(path.join(DIST_DIR, 'configs')).filter(f => f.endsWith('.json')).length;
   console.log(`   📦 configs/*.json (${configCount} 个)`);
   console.log('   🛠️  调试版脚本: Unified_VIP_Unlock_Manager_v22.debug.js');
+  console.log('   🛠️  调试版订阅: rewrite.debug.conf');
 
   if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
     console.log('\n📋 诊断功能说明:');

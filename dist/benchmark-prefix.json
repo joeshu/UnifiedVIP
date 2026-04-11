@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-11T02:52:57.801Z",
+  "generated_at": "2026-04-11T03:06:17.288Z",
   "mode": "full",
   "host_count": 10000,
   "rounds": 6,
@@ -11,22 +11,22 @@
   "results": {
     "repeated": {
       "baseline": {
-        "avg_ms": 2272.152833333333,
-        "ops_per_sec": 4401
+        "avg_ms": 2590.13,
+        "ops_per_sec": 3861
       },
       "optimized": {
-        "avg_ms": 325.1991666666666,
-        "ops_per_sec": 30750
+        "avg_ms": 365.7385000000001,
+        "ops_per_sec": 27342
       }
     },
     "diverse": {
       "baseline": {
-        "avg_ms": 2547.297333333334,
-        "ops_per_sec": 3926
+        "avg_ms": 2741.5085000000004,
+        "ops_per_sec": 3648
       },
       "optimized": {
-        "avg_ms": 497.6388333333325,
-        "ops_per_sec": 20095
+        "avg_ms": 513.8881666666675,
+        "ops_per_sec": 19459
       }
     }
   },

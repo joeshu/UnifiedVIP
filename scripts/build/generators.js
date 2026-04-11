@@ -216,7 +216,7 @@ function isQxSafeMitmHost(host) {
   return false;
 }
 
-function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR }) {
+function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_DIR, scriptFilename = 'Unified_VIP_Unlock_Manager_v22.js' }) {
   const autoHostSet = new Set();
   const observedHostSet = new Set();
   const hostSourceMap = new Map();
@@ -317,7 +317,7 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
 
   for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     const name = nameLookup[id]?.name || id;
-    conf += `# ${name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/Unified_VIP_Unlock_Manager_v22.js\n\n`;
+    conf += `# ${name}\n${cfg.urlPattern} url script-response-body https://joeshu.github.io/UnifiedVIP/${scriptFilename}\n\n`;
   }
 
   const customRejectPath = path.join(RULES_DIR, 'custom-reject.txt');
