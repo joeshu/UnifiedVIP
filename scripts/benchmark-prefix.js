@@ -49,51 +49,13 @@ function baselineFactory(index) {
 }
 
 function optimizedFactory(index) {
-  const suffixEntries = Object.entries(index.suffix || {}).sort((a, b) => b[0].length - a[0].length);
-
-  const suffixTrie = {};
-  for (const [suffix, ids] of suffixEntries) {
-    const parts = suffix.split('.').reverse();
-    let node = suffixTrie;
-    for (const p of parts) {
-      if (!node[p]) node[p] = {};
-      node = node[p];
-    }
-    node.$ = ids;
-  }
-
-  function findBySuffixTrie(h) {
-    const parts = h.split('.').reverse();
-    let node = suffixTrie;
-    let found = null;
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      if (!node[p]) break;
-      node = node[p];
-      if (node.$) {
-        found = {
-          ids: node.$,
-          method: 'suffix',
-          matched: parts.slice(0, i + 1).reverse().join('.')
-        };
-      }
-    }
-    return found;
-  }
-
   const keywordEntries = Object.entries(index.keyword || {}).sort((a, b) => b[0].length - a[0].length);
   const keywordBuckets2 = {};
-  const keywordBuckets1 = {};
   for (const [kw, ids] of keywordEntries) {
-    if (kw.length >= 2) {
-      const k2 = kw.slice(0, 2);
-      if (!keywordBuckets2[k2]) keywordBuckets2[k2] = [];
-      keywordBuckets2[k2].push([kw, ids]);
-    } else {
-      const k1 = kw[0] || '#';
-      if (!keywordBuckets1[k1]) keywordBuckets1[k1] = [];
-      keywordBuckets1[k1].push([kw, ids]);
-    }
+    const k2 = kw.slice(0, 2);
+    if (k2.length < 2) continue;
+    if (!keywordBuckets2[k2]) keywordBuckets2[k2] = [];
+    keywordBuckets2[k2].push([kw, ids]);
   }
 
   const cache = new Map();
@@ -114,6 +76,15 @@ function optimizedFactory(index) {
     cache.set(k, v);
   }
 
+  function findBySuffixFast(h) {
+    const lastDot = h.lastIndexOf('.');
+    if (lastDot <= 0 || lastDot >= h.length - 1) return null;
+    const prevDot = h.lastIndexOf('.', lastDot - 1);
+    const suffix = prevDot >= 0 ? h.slice(prevDot + 1) : h;
+    const ids = index.suffix[suffix];
+    return ids ? { ids, method: 'suffix', matched: suffix } : null;
+  }
+
   return function findByPrefixOptimized(hostname) {
     const h = String(hostname || '').toLowerCase();
     if (!h) return null;
@@ -124,35 +95,17 @@ function optimizedFactory(index) {
     if (index.exact[h]) {
       out = { ids: index.exact[h], method: 'exact', matched: h };
     } else {
-      out = findBySuffixTrie(h);
+      out = findBySuffixFast(h);
       if (!out) {
-        const seen2 = new Set();
+        const seen2 = Object.create(null);
         for (let i = 0; i < h.length - 1; i++) {
           const a = h[i], b = h[i + 1];
           if (a === '.' || a === '-' || a === '_') continue;
           if (b === '.' || b === '-' || b === '_') continue;
           const k2 = a + b;
-          if (seen2.has(k2)) continue;
-          seen2.add(k2);
+          if (seen2[k2]) continue;
+          seen2[k2] = 1;
           const bucket = keywordBuckets2[k2];
-          if (!bucket) continue;
-          for (const [kw, ids] of bucket) {
-            if (h.includes(kw)) {
-              out = { ids, method: 'keyword', matched: kw };
-              break;
-            }
-          }
-          if (out) break;
-        }
-      }
-      if (!out) {
-        const seen1 = new Set();
-        for (let i = 0; i < h.length; i++) {
-          const ch = h[i];
-          if (ch === '.' || ch === '-' || ch === '_') continue;
-          if (seen1.has(ch)) continue;
-          seen1.add(ch);
-          const bucket = keywordBuckets1[ch];
           if (!bucket) continue;
           for (const [kw, ids] of bucket) {
             if (h.includes(kw)) {
