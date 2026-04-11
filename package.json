@@ -13,6 +13,7 @@
     "benchmark:prefix": "node scripts/benchmark-prefix.js --fast",
     "benchmark:prefix:fast": "node scripts/benchmark-prefix.js --fast",
     "benchmark:prefix:full": "node scripts/benchmark-prefix.js --full",
+    "benchmark:runtime": "node scripts/benchmark-runtime.js",
     "watch": "nodemon --watch src --exec \"npm run build\"",
     "clean": "rm -rf dist/",
     "verify": "ls -la dist/ && head -c 200 dist/Unified_VIP_Unlock_Manager_v22.js",
