@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-04-11T04:25:31.220Z
+ * 构建时间: 2026-04-11T04:33:40.545Z
  * APP数量: 25
  * ==========================================
  *
@@ -440,6 +440,49 @@ function sendNotify(title, subtitle, message, options) {
   }
 }
 
+function makeConditionMatcher(def) {
+  const checkPath = def.check || 'data';
+  const checkTokens = Utils.compilePath(checkPath);
+  const pathNeedle = def.path ? String(def.path) : '';
+  const queryRegex = def.param ? RegexPool.get(`[?&]${def.param}=([^&]+)`) : null;
+  const expectedValue = def.value;
+
+  return (obj, env) => {
+    switch (def.condition || def.when) {
+      case 'empty': {
+        const data = Utils.getPath(obj, checkTokens);
+        return !data || Object.keys(data).length === 0;
+      }
+      case 'pathMatch': {
+        if (!pathNeedle) return false;
+        if (env && env.getPathname) {
+          const pathname = env.getPathname();
+          if (pathname && pathname.includes(pathNeedle)) return true;
+        }
+        const url = env && env.getUrl ? env.getUrl() : '';
+        return !!(url && url.includes(pathNeedle));
+      }
+      case 'queryMatch': {
+        if (!queryRegex) return false;
+        const search = env && env.getSearch ? env.getSearch() : '';
+        const source = search || (env && env.getUrl ? env.getUrl() : '');
+        const match = source.match(queryRegex);
+        return !!(match && decodeURIComponent(match[1]) === expectedValue);
+      }
+      case 'includes': {
+        const checkData = Utils.getPath(obj, checkTokens);
+        return Array.isArray(checkData) ? checkData.includes(expectedValue) : String(checkData).includes(expectedValue);
+      }
+      case 'isObject':
+        return typeof obj.data === 'object' && !Array.isArray(obj.data);
+      case 'isArray':
+        return Array.isArray(obj.data);
+      default:
+        return false;
+    }
+  };
+}
+
 function createProcessorFactory(requestId) {
   return {
     setFields: (params) => {
@@ -507,37 +550,44 @@ function createProcessorFactory(requestId) {
       };
     },
 
-    deleteFields: (params) => (obj, env) => {
-      for (const path of params.paths || []) {
-        if (!path || typeof path !== 'string') continue;
-
+    deleteFields: (params) => {
+      const compiledPaths = (params.paths || []).map(path => {
+        if (!path || typeof path !== 'string') return null;
         const parts = path.split('.');
-        if (parts.length === 0) continue;
-
-        const parentPath = parts.slice(0, -1).join('.');
+        if (!parts.length) return null;
         const last = parts[parts.length - 1];
-        const parent = parentPath ? Utils.getPath(obj, parentPath) : obj;
-
-        if (!parent || typeof parent !== 'object') continue;
-
+        const parentTokens = parts.length > 1 ? Utils.compilePath(parts.slice(0, -1).join('.')) : null;
         const lastMatch = last.match(/^([^\[\]]+)\[(\d+)\]$/);
-        if (lastMatch) {
-          const arrName = lastMatch[1];
-          const idx = parseInt(lastMatch[2], 10);
-          if (Array.isArray(parent[arrName]) && idx >= 0 && idx < parent[arrName].length) {
-            parent[arrName].splice(idx, 1);
-          }
-        } else if (Array.isArray(parent)) {
-          for (const item of parent) {
-            if (item && typeof item === 'object') {
-              delete item[last];
+        return {
+          parentTokens,
+          last,
+          arrayDelete: lastMatch ? { key: lastMatch[1], index: parseInt(lastMatch[2], 10) } : null
+        };
+      }).filter(Boolean);
+
+      return (obj, env) => {
+        for (const item of compiledPaths) {
+          const parent = item.parentTokens ? Utils.getPath(obj, item.parentTokens) : obj;
+          if (!parent || typeof parent !== 'object') continue;
+
+          if (item.arrayDelete) {
+            const arr = parent[item.arrayDelete.key];
+            const idx = item.arrayDelete.index;
+            if (Array.isArray(arr) && idx >= 0 && idx < arr.length) {
+              arr.splice(idx, 1);
             }
+          } else if (Array.isArray(parent)) {
+            for (const row of parent) {
+              if (row && typeof row === 'object') {
+                delete row[item.last];
+              }
+            }
+          } else {
+            delete parent[item.last];
           }
-        } else {
-          delete parent[last];
         }
-      }
-      return obj;
+        return obj;
+      };
     },
 
     sliceArray: (params) => {
@@ -653,28 +703,7 @@ function createProcessorFactory(requestId) {
     },
 
     when: (params, compile) => {
-      const conditionFn = (obj, env) => {
-        const url = env && env.getUrl ? env.getUrl() : '';
-        switch (params.condition) {
-          case "empty":
-            const data = Utils.getPath(obj, params.check || 'data');
-            return !data || Object.keys(data).length === 0;
-          case "pathMatch":
-            return params.path && url.includes(params.path);
-          case "queryMatch":
-            const match = url.match(RegexPool.get(`[?&]${params.param}=([^&]+)`));
-            return match && decodeURIComponent(match[1]) === params.value;
-          case "includes":
-            const checkData = Utils.getPath(obj, params.check || 'data');
-            return Array.isArray(checkData) ? checkData.includes(params.value) : String(checkData).includes(params.value);
-          case "isObject":
-            return typeof obj.data === 'object' && !Array.isArray(obj.data);
-          case "isArray":
-            return Array.isArray(obj.data);
-          default:
-            return false;
-        }
-      };
+      const conditionFn = makeConditionMatcher(params || {});
 
       const thenProcessor = params.then ? compile(params.then) : null;
       const elseProcessor = params.else ? compile(params.else) : null;
@@ -692,24 +721,7 @@ function createProcessorFactory(requestId) {
 
     sceneDispatcher: (params, compile) => {
       const scenes = (params.scenes || []).map(s => ({
-        matchFn: (obj, env) => {
-          const url = env && env.getUrl ? env.getUrl() : '';
-          switch (s.when) {
-            case "pathMatch": return s.path && url.includes(s.path);
-            case "queryMatch":
-              const m = url.match(RegexPool.get(`[?&]${s.param}=([^&]+)`));
-              return m && decodeURIComponent(m[1]) === s.value;
-            case "includes":
-              const d = Utils.getPath(obj, s.check || 'data');
-              return Array.isArray(d) ? d.includes(s.value) : String(d).includes(s.value);
-            case "empty":
-              const ed = Utils.getPath(obj, s.check || 'data');
-              return !ed || Object.keys(ed).length === 0;
-            case "isObject": return typeof obj.data === 'object' && !Array.isArray(obj.data);
-            case "isArray": return Array.isArray(obj.data);
-            default: return false;
-          }
-        },
+        matchFn: makeConditionMatcher(s || {}),
         then: compile(s.then)
       }));
 
