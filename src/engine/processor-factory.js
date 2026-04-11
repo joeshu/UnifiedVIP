@@ -7,6 +7,69 @@ function sendNotify(title, subtitle, message, options) {
   }
 }
 
+function compileValueSetterMap(fields) {
+  return Object.entries(fields || {}).map(([path, value]) => ({
+    tokens: Utils.compilePath(path),
+    value,
+    isTemplate: typeof value === 'string' && value.includes('{{')
+  }));
+}
+
+function applyCompiledValueSetters(target, compiled, sourceObj) {
+  for (const item of compiled) {
+    const value = item.isTemplate ? Utils.resolveTemplate(item.value, sourceObj) : item.value;
+    Utils.setPath(target, item.tokens, value);
+  }
+}
+
+function buildNotifyMessageResolver(params) {
+  const subtitleFieldTokens = params.subtitleField ? Utils.compilePath(params.subtitleField) : null;
+  const messageFieldTokens = params.messageField ? Utils.compilePath(params.messageField) : null;
+  const markFieldTokens = params.markField ? Utils.compilePath(params.markField) : null;
+  const prefixText = params.prefix || '';
+  const maxLen = params.maxLength || 500;
+  const separator = params.separator || '\n';
+  const title = params.title || 'UnifiedVIP';
+  const template = typeof params.template === 'string' ? params.template : '';
+  const hasTemplate = !!template;
+
+  return {
+    title,
+    markFieldTokens,
+    resolve(obj) {
+      let subtitle = params.subtitle || '';
+      let message = params.message || '';
+
+      if (subtitleFieldTokens) {
+        subtitle = Utils.getPath(obj, subtitleFieldTokens) || subtitle;
+      }
+
+      if (hasTemplate) {
+        message = template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+          return Utils.getPath(obj, key) || match;
+        });
+      } else if (messageFieldTokens) {
+        const fieldData = Utils.getPath(obj, messageFieldTokens);
+        if (fieldData) {
+          message = typeof fieldData === 'object'
+            ? Utils.formatObject(fieldData, separator)
+            : String(fieldData);
+        }
+      }
+
+      if (prefixText) {
+        message = prefixText + message;
+      }
+
+      if (message.length > maxLen) {
+        message = message.substring(0, maxLen) + '...';
+      }
+
+      return { subtitle, message };
+    }
+  };
+}
+
 function makeConditionMatcher(def) {
   const checkPath = def.check || 'data';
   const checkTokens = Utils.compilePath(checkPath);
@@ -53,31 +116,17 @@ function makeConditionMatcher(def) {
 function createProcessorFactory(requestId) {
   return {
     setFields: (params) => {
-      const fields = params.fields || {};
-      const compiled = Object.entries(fields).map(([path, value]) => ({
-        tokens: Utils.compilePath(path),
-        value
-      }));
+      const compiled = compileValueSetterMap(params.fields || {});
 
       return (obj, env) => {
-        for (const item of compiled) {
-          let value = item.value;
-          if (typeof value === 'string' && value.includes('{{')) {
-            value = Utils.resolveTemplate(value, obj);
-          }
-          Utils.setPath(obj, item.tokens, value);
-        }
+        applyCompiledValueSetters(obj, compiled, obj);
         return obj;
       };
     },
 
     mapArray: (params) => {
       const arrPathTokens = Utils.compilePath(params.path);
-      const fields = params.fields || {};
-      const compiled = Object.entries(fields).map(([path, value]) => ({
-        tokens: Utils.compilePath(path),
-        value
-      }));
+      const compiled = compileValueSetterMap(params.fields || {});
 
       return (obj, env) => {
         const arr = Utils.getPath(obj, arrPathTokens);
@@ -85,13 +134,7 @@ function createProcessorFactory(requestId) {
 
         for (const itemObj of arr) {
           if (!itemObj) continue;
-          for (const item of compiled) {
-            let value = item.value;
-            if (typeof value === 'string' && value.includes('{{')) {
-              value = Utils.resolveTemplate(value, itemObj);
-            }
-            Utils.setPath(itemObj, item.tokens, value);
-          }
+          applyCompiledValueSetters(itemObj, compiled, itemObj);
         }
         return obj;
       };
@@ -179,7 +222,9 @@ function createProcessorFactory(requestId) {
 
     processByKeyPrefix: (params) => {
       const objPathTokens = Utils.compilePath(params.objPath);
-      const rules = Object.entries(params.prefixRules || {});
+      const entries = Object.entries(params.prefixRules || {});
+      const wildcardEntry = entries.find(([prefix]) => prefix === '*') || null;
+      const specificRules = entries.filter(([prefix]) => prefix !== '*');
 
       return (obj, env) => {
         const target = Utils.getPath(obj, objPathTokens);
@@ -188,15 +233,19 @@ function createProcessorFactory(requestId) {
         for (const key in target) {
           const value = target[key];
           if (!value || typeof value !== 'object') continue;
-          for (const [prefix, handler] of rules) {
-            if (prefix !== '*' && key.startsWith(prefix)) {
-              Object.assign(value, handler);
+
+          let matchedHandler = null;
+          for (const [prefix, handler] of specificRules) {
+            if (key.startsWith(prefix)) {
+              matchedHandler = handler;
               break;
             }
-            if (prefix === '*') {
-              Object.assign(value, handler);
-              break;
-            }
+          }
+          if (!matchedHandler && wildcardEntry) {
+            matchedHandler = wildcardEntry[1];
+          }
+          if (matchedHandler) {
+            Object.assign(value, matchedHandler);
           }
         }
         return obj;
@@ -204,49 +253,14 @@ function createProcessorFactory(requestId) {
     },
 
     notify: (params) => {
-      const title = params.title || 'UnifiedVIP';
-      const subtitleFieldTokens = params.subtitleField ? Utils.compilePath(params.subtitleField) : null;
-      const messageFieldTokens = params.messageField ? Utils.compilePath(params.messageField) : null;
-      const markFieldTokens = params.markField ? Utils.compilePath(params.markField) : null;
+      const resolver = buildNotifyMessageResolver(params || {});
 
       return (obj, env) => {
-        let subtitle = params.subtitle || '';
-        let message = params.message || '';
+        const { subtitle, message } = resolver.resolve(obj);
+        sendNotify(resolver.title, subtitle, message, params.options);
 
-        if (subtitleFieldTokens) {
-          subtitle = Utils.getPath(obj, subtitleFieldTokens) || subtitle;
-        }
-
-        // template 优先
-        if (params.template) {
-          message = params.template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-            return Utils.getPath(obj, key) || match;
-          });
-        } else if (messageFieldTokens) {
-          // 使用 formatObject 处理对象
-          const fieldData = Utils.getPath(obj, messageFieldTokens);
-          if (fieldData) {
-            if (typeof fieldData === 'object') {
-              message = Utils.formatObject(fieldData, params.separator || '\n');
-            } else {
-              message = String(fieldData);
-            }
-          }
-        }
-
-        if (params.prefix) {
-          message = params.prefix + message;
-        }
-
-        const maxLen = params.maxLength || 500;
-        if (message.length > maxLen) {
-          message = message.substring(0, maxLen) + '...';
-        }
-
-        sendNotify(title, subtitle, message, params.options);
-
-        if (markFieldTokens) {
-          Utils.setPath(obj, markFieldTokens, true);
+        if (resolver.markFieldTokens) {
+          Utils.setPath(obj, resolver.markFieldTokens, true);
         }
 
         return obj;
