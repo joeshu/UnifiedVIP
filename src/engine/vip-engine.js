@@ -112,18 +112,29 @@ class VipEngine {
     this._requestId = requestId;
   }
 
+  _resolveRuntimeMeta(config) {
+    const meta = (config && config._meta && typeof config._meta === 'object') ? config._meta : {};
+    return {
+      mode: meta.mode || config.mode || '',
+      hasRegex: meta.hasRegex !== undefined ? !!meta.hasRegex : !!((config._regexReplacements || config.regexReplacements || []).length),
+      hasGame: meta.hasGame !== undefined ? !!meta.hasGame : !!((config._gameResources || config.gameResources || []).length),
+      hasHtml: meta.hasHtml !== undefined ? !!meta.hasHtml : !!((config._htmlReplacements || config.htmlReplacements || []).length),
+      hasHtmlMarkers: meta.hasHtmlMarkers !== undefined ? !!meta.hasHtmlMarkers : !!((config._htmlMarkers || config.htmlMarkers || []).length)
+    };
+  }
+
   async process(body, config) {
     const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
+    const runtimeMeta = this._resolveRuntimeMeta(config || {});
 
-    if (!config || !config.mode) {
+    if (!config || !runtimeMeta.mode) {
       return { body: normalizedBody };
     }
 
-    // forward/remote 模式不依赖响应 body，必须优先分流，避免空 body 被提前短路
-    if (config.mode === 'forward') {
+    if (runtimeMeta.mode === 'forward') {
       return await this._processForward(config);
     }
-    if (config.mode === 'remote') {
+    if (runtimeMeta.mode === 'remote') {
       return await this._processRemote(config);
     }
 
@@ -131,20 +142,21 @@ class VipEngine {
 
     const contentType = this.env && this.env.getContentType ? String(this.env.getContentType() || '').toLowerCase() : '';
 
-    switch (config.mode) {
+    switch (runtimeMeta.mode) {
       case 'json':
         if (!this._looksLikeJsonBody(normalizedBody, contentType)) return { body: normalizedBody };
         return this._processJson(normalizedBody, config);
       case 'regex':
-        if (!(config._regexReplacements || config.regexReplacements || []).length) return { body: normalizedBody };
+        if (!runtimeMeta.hasRegex) return { body: normalizedBody };
         return this._processRegex(normalizedBody, config);
       case 'game':
-        if (!(config._gameResources || config.gameResources || []).length) return { body: normalizedBody };
+        if (!runtimeMeta.hasGame) return { body: normalizedBody };
         return this._processGame(normalizedBody, config);
       case 'hybrid':
         return this._processHybrid(normalizedBody, config, contentType);
       case 'html':
-        if (!this._looksLikeHtmlBody(normalizedBody, contentType)) return { body: normalizedBody };
+        if (!runtimeMeta.hasHtml) return { body: normalizedBody };
+        if (!this._looksLikeHtmlBody(normalizedBody, contentType) && !runtimeMeta.hasHtmlMarkers) return { body: normalizedBody };
         return this._processHtml(normalizedBody, config);
       default:
         return { body: normalizedBody };

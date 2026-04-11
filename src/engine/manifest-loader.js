@@ -56,6 +56,11 @@ class SimpleManifestLoader {
     }
   }
 
+  _getConfigMeta(configId) {
+    const item = this._lazyConfigs[configId];
+    return item && item.meta ? item.meta : null;
+  }
+
   _createProxy() {
     const self = this;
     return {
@@ -105,7 +110,8 @@ class SimpleManifestLoader {
         return null;
       },
 
-      getConfigVersion: (configId) => (self._lazyConfigs[configId] ? '1.0' : null)
+      getConfigVersion: (configId) => (self._lazyConfigs[configId] ? '1.0' : null),
+      getConfigMeta: (configId) => self._getConfigMeta(configId)
     };
   }
 }

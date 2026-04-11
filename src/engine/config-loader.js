@@ -31,6 +31,17 @@ function prepareHtmlMarkers(list) {
   return list.filter(Boolean).map(m => String(m));
 }
 
+function buildPreparedMeta(config) {
+  return {
+    mode: config && config.mode ? String(config.mode) : '',
+    hasProcessor: typeof config._processor === 'function' || !!config.processor,
+    hasRegex: Array.isArray(config._regexReplacements) ? config._regexReplacements.length > 0 : Array.isArray(config.regexReplacements) && config.regexReplacements.length > 0,
+    hasGame: Array.isArray(config._gameResources) ? config._gameResources.length > 0 : Array.isArray(config.gameResources) && config.gameResources.length > 0,
+    hasHtml: Array.isArray(config._htmlReplacements) ? config._htmlReplacements.length > 0 : Array.isArray(config.htmlReplacements) && config.htmlReplacements.length > 0,
+    hasHtmlMarkers: Array.isArray(config._htmlMarkers) ? config._htmlMarkers.length > 0 : Array.isArray(config.htmlMarkers) && config.htmlMarkers.length > 0
+  };
+}
+
 class SimpleConfigLoader {
   constructor(requestId) {
     this._requestId = requestId;
@@ -124,10 +135,12 @@ class SimpleConfigLoader {
     const config = Object.assign({}, raw);
 
     if (config._prepared === true) {
+      if (!config._meta) config._meta = buildPreparedMeta(config);
       return config;
     }
 
     if (config.mode === 'forward' || config.mode === 'remote') {
+      config._meta = buildPreparedMeta(config);
       config._prepared = true;
       return config;
     }
@@ -159,6 +172,7 @@ class SimpleConfigLoader {
       config.htmlMarkers = null;
     }
 
+    config._meta = buildPreparedMeta(config);
     config._prepared = true;
     return config;
   }

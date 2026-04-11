@@ -55,6 +55,19 @@ const CONFIG = {
 const META = { name: 'UnifiedVIP', version: '${BUILD_CONFIG.VERSION}' };`;
 }
 
+function buildConfigMeta(config, id) {
+  const mode = config && config.mode ? String(config.mode) : '';
+  return {
+    id,
+    mode,
+    hasProcessor: !!config.processor,
+    hasRegex: Array.isArray(config.regexReplacements) && config.regexReplacements.length > 0,
+    hasGame: Array.isArray(config.gameResources) && config.gameResources.length > 0,
+    hasHtml: Array.isArray(config.htmlReplacements) && config.htmlReplacements.length > 0,
+    hasHtmlMarkers: Array.isArray(config.htmlMarkers) && config.htmlMarkers.length > 0
+  };
+}
+
 function generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG }) {
   // 轻量 Manifest：只保留 URL 匹配所需的最小字段
   // 完整配置从远程 configs/{id}.json 按需加载
@@ -66,14 +79,15 @@ function generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG }) {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         configs[id] = {
           name: config.name || id,
-          urlPattern: config.urlPattern
+          urlPattern: config.urlPattern,
+          meta: buildConfigMeta(config, id)
         };
         if (config.mode) configs[id].mode = config.mode;
       } catch (e) {
-        configs[id] = { name: id, urlPattern: baseCfg.urlPattern };
+        configs[id] = { name: id, urlPattern: baseCfg.urlPattern, meta: buildConfigMeta(baseCfg, id) };
       }
     } else {
-      configs[id] = { name: id, urlPattern: baseCfg.urlPattern };
+      configs[id] = { name: id, urlPattern: baseCfg.urlPattern, meta: buildConfigMeta(baseCfg, id) };
     }
   }
 
