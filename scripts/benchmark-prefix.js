@@ -10,13 +10,15 @@ const PRESETS = {
     name: 'fast',
     hostCount: 3000,
     rounds: 3,
-    writeReport: false
+    writeReport: false,
+    writeJson: true
   },
   full: {
     name: 'full',
     hostCount: 10000,
     rounds: 6,
-    writeReport: true
+    writeReport: true,
+    writeJson: true
   }
 };
 
@@ -51,6 +53,7 @@ function baselineFactory(index) {
 function optimizedFactory(index) {
   const keywordEntries = Object.entries(index.keyword || {}).sort((a, b) => b[0].length - a[0].length);
   const keywordBuckets2 = {};
+  const keywordBucketLens = {};
   for (const [kw, ids] of keywordEntries) {
     const k2 = kw.slice(0, 2);
     if (k2.length < 2) continue;
@@ -59,9 +62,14 @@ function optimizedFactory(index) {
     if (!keywordBuckets2[k2][lenKey]) keywordBuckets2[k2][lenKey] = [];
     keywordBuckets2[k2][lenKey].push([kw, ids]);
   }
+  for (const [k2, grouped] of Object.entries(keywordBuckets2)) {
+    keywordBucketLens[k2] = Object.keys(grouped).sort((x, y) => Number(y) - Number(x));
+  }
 
   const cache = new Map();
   const CACHE_LIMIT = 200;
+  const stats = { exact: 0, suffix: 0, keyword: 0, cacheHit: 0, cacheMiss: 0 };
+
   function cacheGet(k) {
     if (!cache.has(k)) return undefined;
     const v = cache.get(k);
@@ -87,18 +95,25 @@ function optimizedFactory(index) {
     return ids ? { ids, method: 'suffix', matched: suffix } : null;
   }
 
-  return function findByPrefixOptimized(hostname) {
+  function findByPrefixOptimized(hostname) {
     const h = String(hostname || '').toLowerCase();
     if (!h) return null;
     const c = cacheGet(h);
-    if (c !== undefined) return c;
+    if (c !== undefined) {
+      stats.cacheHit++;
+      return c;
+    }
+    stats.cacheMiss++;
 
     let out = null;
     if (index.exact[h]) {
+      stats.exact++;
       out = { ids: index.exact[h], method: 'exact', matched: h };
     } else {
       out = findBySuffixFast(h);
-      if (!out) {
+      if (out) {
+        stats.suffix++;
+      } else {
         const seen2 = Object.create(null);
         for (let i = 0; i < h.length - 1; i++) {
           const a = h[i], b = h[i + 1];
@@ -109,11 +124,12 @@ function optimizedFactory(index) {
           seen2[k2] = 1;
           const grouped = keywordBuckets2[k2];
           if (!grouped) continue;
-          const lens = Object.keys(grouped).sort((x, y) => Number(y) - Number(x));
+          const lens = keywordBucketLens[k2] || [];
           for (const lenKey of lens) {
             if (Number(lenKey) > h.length) continue;
             for (const [kw, ids] of grouped[lenKey]) {
               if (h.includes(kw)) {
+                stats.keyword++;
                 out = { ids, method: 'keyword', matched: kw };
                 break;
               }
@@ -127,7 +143,10 @@ function optimizedFactory(index) {
 
     cacheSet(h, out);
     return out;
-  };
+  }
+
+  findByPrefixOptimized.__stats = stats;
+  return findByPrefixOptimized;
 }
 
 function bench(name, fn, hosts, rounds = 5) {
@@ -216,6 +235,34 @@ function writeMarkdownReport(index, results) {
   return reportPath;
 }
 
+function writeJsonReport(index, preset, results, stats) {
+  const jsonPath = path.join(__dirname, '../dist/benchmark-prefix.json');
+  const payload = {
+    generated_at: new Date().toISOString(),
+    mode: preset.name,
+    host_count: preset.hostCount,
+    rounds: preset.rounds,
+    index: {
+      exact: Object.keys(index.exact).length,
+      suffix: Object.keys(index.suffix).length,
+      keyword: Object.keys(index.keyword).length
+    },
+    results: {
+      repeated: {
+        baseline: { avg_ms: results.repeated.baseline.avg, ops_per_sec: results.repeated.baseline.ops },
+        optimized: { avg_ms: results.repeated.optimized.avg, ops_per_sec: results.repeated.optimized.ops }
+      },
+      diverse: {
+        baseline: { avg_ms: results.diverse.baseline.avg, ops_per_sec: results.diverse.baseline.ops },
+        optimized: { avg_ms: results.diverse.optimized.avg, ops_per_sec: results.diverse.optimized.ops }
+      }
+    },
+    optimized_stats: stats
+  };
+  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2) + '\n');
+  return jsonPath;
+}
+
 const preset = resolvePreset(process.argv.slice(2));
 
 console.log('=== Prefix Matching Benchmark ===');
@@ -237,12 +284,19 @@ const divOpt = bench('optimized', optimized, diverse, preset.rounds);
 console.log(formatLine(divBase));
 console.log(formatLine(divOpt));
 
+const reportResults = {
+  repeated: { baseline: repBase, optimized: repOpt },
+  diverse: { baseline: divBase, optimized: divOpt }
+};
+
 if (preset.writeReport) {
-  const out = writeMarkdownReport(index, {
-    repeated: { baseline: repBase, optimized: repOpt },
-    diverse: { baseline: divBase, optimized: divOpt }
-  });
+  const out = writeMarkdownReport(index, reportResults);
   console.log(`\n📄 benchmark report: ${out}`);
 } else {
   console.log('\nℹ️ fast 模式不写 docs/benchmark-prefix.md；使用 --full 可生成完整报告');
+}
+
+if (preset.writeJson) {
+  const jsonOut = writeJsonReport(index, preset, reportResults, optimized.__stats || {});
+  console.log(`📄 benchmark json: ${jsonOut}`);
 }

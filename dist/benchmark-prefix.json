@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-04-11T02:39:05.705Z",
+  "mode": "fast",
+  "host_count": 3000,
+  "rounds": 3,
+  "index": {
+    "exact": 19,
+    "suffix": 27,
+    "keyword": 53
+  },
+  "results": {
+    "repeated": {
+      "baseline": {
+        "avg_ms": 687.7606666666667,
+        "ops_per_sec": 4362
+      },
+      "optimized": {
+        "avg_ms": 95.04999999999988,
+        "ops_per_sec": 31562
+      }
+    },
+    "diverse": {
+      "baseline": {
+        "avg_ms": 704.0336666666664,
+        "ops_per_sec": 4261
+      },
+      "optimized": {
+        "avg_ms": 119.1176666666667,
+        "ops_per_sec": 25185
+      }
+    }
+  },
+  "optimized_stats": {
+    "exact": 30,
+    "suffix": 17694,
+    "keyword": 0,
+    "cacheHit": 276,
+    "cacheMiss": 17724
+  }
+}

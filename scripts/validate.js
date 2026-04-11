@@ -3,6 +3,7 @@
 const Ajv = require('ajv');
 const { APP_REGISTRY, getAllConfigs, scanConfigs } = require('../src/apps/_index');
 
+const VERBOSE = process.argv.includes('--verbose');
 const VALID_MODES = new Set(['json', 'regex', 'forward', 'remote', 'game', 'hybrid', 'html']);
 const ajv = new Ajv({ allErrors: true, allowUnionTypes: true });
 
@@ -89,16 +90,9 @@ function validateConfigByMode(id, cfg, errors) {
   }
 }
 
-function isComplexUrlPattern(pattern) {
-  if (!pattern || typeof pattern !== 'string') return false;
-  return /\(\?:|\|/.test(pattern);
-}
-
 function validateMitmHints(id, cfg, warnings) {
   const hasMitmHostsField = Array.isArray(cfg.mitmHosts);
-  if (!hasMitmHostsField) {
-    warnings.push(`${id}: 缺少 mitmHosts 字段（建议显式配置）`);
-  }
+  if (!hasMitmHostsField) warnings.push(`${id}: 缺少 mitmHosts 字段（建议显式配置）`);
 }
 
 function validateConfigs(errors, warnings) {
@@ -137,26 +131,19 @@ function validateConfigs(errors, warnings) {
 }
 
 function validate() {
-  scanConfigs({ silent: false });
+  scanConfigs({ silent: !VERBOSE });
   console.log('🔍 验证配置...\n');
 
   const errors = [];
   const warnings = [];
 
-  // 1) 检查 APP_REGISTRY（只校验其职责字段：urlPattern）
   validateRegistry(errors);
-
-  // 2) 检查完整配置（由 getAllConfigs 生成）
   const allConfigs = validateConfigs(errors, warnings);
 
-  // 3) 检查重复 ID
   const ids = Object.keys(APP_REGISTRY);
   const uniqueIds = [...new Set(ids)];
-  if (ids.length !== uniqueIds.length) {
-    errors.push('APP_REGISTRY 中有重复的ID');
-  }
+  if (ids.length !== uniqueIds.length) errors.push('APP_REGISTRY 中有重复的ID');
 
-  // 输出结果
   if (errors.length === 0) {
     console.log('✅ 验证通过！');
     console.log(`   APP数量: ${ids.length}`);
@@ -176,6 +163,7 @@ function validate() {
       warnings.forEach(w => console.log(`   - ${w}`));
     }
 
+    if (!VERBOSE) console.log('\nℹ️  使用 --verbose 可查看完整 configs 扫描日志');
     return 0;
   }
 

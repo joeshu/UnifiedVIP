@@ -42,6 +42,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Prefix benchmark (fast)
+        run: npm run benchmark:prefix:fast
+
+      - name: Benchmark threshold gate
+        run: npm run check:benchmark
+
       - name: MITM summary (PR)
         if: github.event_name == 'pull_request'
         run: |

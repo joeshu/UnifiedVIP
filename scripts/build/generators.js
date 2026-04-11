@@ -2,6 +2,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const MANUAL_MITM_HOSTS_PATH = path.join(__dirname, '../../rules/mitm-manual.txt');
+
+function readLineList(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  return fs.readFileSync(filePath, 'utf8')
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s && !s.startsWith('#'));
+}
+
 function generateHeaderMinified({ BUILD_CONFIG, APP_REGISTRY }) {
   const debugFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
   const verboseFlag = BUILD_CONFIG.DEBUG_MODE ? 'true' : 'false';
@@ -219,23 +229,21 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     else if (!prev.split(' + ').includes(source)) hostSourceMap.set(h, `${prev} + ${source}`);
   }
   
-  // 从 APP_REGISTRY 提取 hostname
-  for (const cfg of Object.values(APP_REGISTRY)) {
+  for (const [id, cfg] of Object.entries(APP_REGISTRY)) {
     const host = extractHostname(cfg?.urlPattern);
     if (host) {
       autoHostSet.add(host);
-      addHostWithSource(host, 'auto:urlPattern');
+      addHostWithSource(host, `auto:urlPattern(${id})`);
     }
   }
   
-  // 从所有配置（包括纯 JSON 配置）提取 hostname + 显式 mitmHosts
   let allConfigs = {};
   try { allConfigs = getAllConfigs(); } catch (e) {}
-  for (const cfg of Object.values(allConfigs)) {
+  for (const [id, cfg] of Object.entries(allConfigs)) {
     const host = extractHostname(cfg?.urlPattern);
     if (host) {
       autoHostSet.add(host);
-      addHostWithSource(host, 'auto:urlPattern');
+      addHostWithSource(host, `auto:urlPattern(${id})`);
     }
 
     if (Array.isArray(cfg?.mitmHosts)) {
@@ -243,30 +251,18 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
         if (typeof h === 'string' && h.trim()) {
           const normalized = h.trim();
           autoHostSet.add(normalized);
-          addHostWithSource(normalized, 'config:mitmHosts');
+          addHostWithSource(normalized, `config:mitmHosts(${id})`);
         }
       }
     }
   }
 
-  const manualHosts = [
-    'juyeye.cc','*.juyeye.cc','55d6b4o1m2.shop','www.55d6b4o1m2.shop','59.82.99.78','*.ipalfish.com','service.hhdd.com','apis.lifeweek.com.cn','fluxapi.vvebo.vip','res5.haotgame.com',
-    'jsq.mingcalc.cn','theater-api.sylangyue.xyz','api.iappdaily.com','api2.tophub.today','api2.tophub.app','api3.tophub.xyz','du.baicizhan.com',
-    'api3.tophub.today','api3.tophub.app','tophub.tophubdata.com','tophub2.tophubdata.com','tophub.idaily.today','tophub2.idaily.today',
-    'tophub.remai.today','tophub.iappdaiy.com','tophub.ipadown.com','service.gpstool.com','mapi.kouyuxingqiu.com','ss.landintheair.com',
-    '*.v2ex.com','v2ex.com','apis.folidaymall.com','gateway-api.yizhilive.com','pagead*.googlesyndication.com','api.gotokeep.com','kit.gotokeep.com',
-    '*.gotokeep.*','120.53.74.*','162.14.5.*','42.187.199.*','101.42.124.*','javelin.mandrillvr.com','api.banxueketang.com',
-    'yzy0916.*.com','yz1018.*.com','yz250907.*.com','yz0320.*.com','cfvip.*.com','yr-game-api.feigo.fun','star.jvplay.cn','iotpservice.smartont.net'
-  ];
-  manualHosts.forEach(h => addHostWithSource(h, 'manual:list'));
+  const manualHosts = readLineList(MANUAL_MITM_HOSTS_PATH);
+  manualHosts.forEach(h => addHostWithSource(h, 'manual:file'));
 
-  // 从规则文件读取观测到的动态域名（仅 QX-safe 会生效）
   const observedHostsPath = path.join(RULES_DIR, 'mitm-observed.txt');
   if (fs.existsSync(observedHostsPath)) {
-    const observedHosts = fs.readFileSync(observedHostsPath, 'utf8')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(s => s && !s.startsWith('#'));
+    const observedHosts = readLineList(observedHostsPath);
     for (const h of observedHosts) {
       observedHostSet.add(h);
       addHostWithSource(h, 'observed:file');
@@ -279,13 +275,8 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     ...Array.from(observedHostSet)
   ])).map(h => String(h || '').trim()).filter(Boolean);
 
-  const hostnames = allCandidateHosts
-    .filter(h => h && isQxSafeMitmHost(h))
-    .sort();
-
-  const filteredOutHosts = allCandidateHosts
-    .filter(h => h && !isQxSafeMitmHost(h))
-    .sort();
+  const hostnames = allCandidateHosts.filter(h => h && isQxSafeMitmHost(h)).sort();
+  const filteredOutHosts = allCandidateHosts.filter(h => h && !isQxSafeMitmHost(h)).sort();
 
   const reportPath = path.join(RULES_DIR, '../dist/mitm-filter-report.md');
   const report = [

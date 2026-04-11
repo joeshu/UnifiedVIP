@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const pkg = require('../package.json');
+const { spawnSync } = require('child_process');
 const BuildGenerators = require('./build/generators');
 
 // ==========================================
@@ -309,6 +310,18 @@ main();
   }));
   const rewriteSize = (fs.statSync(rewritePath).size / 1024).toFixed(2);
   console.log(`   ✅ rewrite.conf (${rewriteSize} KB)`);
+
+  const bench = spawnSync(process.execPath, [path.join(__dirname, 'benchmark-prefix.js'), '--full'], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8'
+  });
+  if (bench.status !== 0) {
+    console.error('   ❌ benchmark:prefix --full 失败');
+    if (bench.stdout) console.error(bench.stdout);
+    if (bench.stderr) console.error(bench.stderr);
+    process.exit(1);
+  }
+  console.log('   ✅ benchmark-prefix.md / benchmark-prefix.json 已更新');
 
   console.log('\n📋 构建完成：');
   const distFiles = fs.readdirSync(DIST_DIR);

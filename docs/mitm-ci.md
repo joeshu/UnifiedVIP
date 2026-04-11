@@ -1,31 +1,38 @@
 # CI / MITM 校验说明
 
-新增能力：
+当前能力：
 
 1. `npm run check:mitm`
-   - 复杂 `urlPattern`（含 `(?:` 或 `|`）必须显式配置 `mitmHosts`
-   - 检查异常通配 host
-   - 输出 mitmHosts 统计
+   - 要求 active 配置全量显式 `mitmHosts`
+   - 检查过宽通配与非 QX-safe host
+   - 默认静默扫描；加 `--verbose` 可看完整 configs 日志
 
-2. PR 模板检查项
-   - 约束修改 `urlPattern` 时同步评估 `mitmHosts`
+2. PR / CI 中的 MITM 变更检查
+   - `scripts/diff-mitm.js`：输出 `[mitm] hostname` 原始差异
+   - `scripts/diff-mitm-summary.js`：输出新增/删除摘要
+   - PR Summary 会同时展示 `MITM Summary` 与 `MITM Host Diff`
 
-3. CI 工作流增强
-   - 在 build 前执行 `validate` + `check:mitm`
-   - PR 场景自动对比 base 分支与当前分支的 `dist/rewrite.conf` 中 `[mitm] hostname` 差异
-
-4. 动态域名观测机制
+3. 动态域名观测机制
    - 观测文件：`rules/mitm-observed.txt`
-   - 一行一个 host（支持注释行 `#`）
-   - 构建会自动合并观测 host，并按 QX-safe 规则过滤
-   - 构建产物输出 `dist/mitm-filter-report.md`，用于查看“候选/保留/过滤”统计
-   - 可用命令批量追加并自动去重：
-     - `npm run mitm:append -- host1 host2`
-     - `npm run mitm:append -- host1 --dry-run`
+   - 手工清单：`rules/mitm-manual.txt`
+   - 构建会自动合并 `manual + config.mitmHosts + auto:urlPattern + observed`
+   - 构建产物输出 `dist/mitm-filter-report.md`
+
+4. 来源优先级与排查
+   - 手工清单：`manual:file`
+   - 配置显式：`config:mitmHosts(appId)`
+   - 自动提取：`auto:urlPattern(appId)`
+   - 观测追加：`observed:file`
+   - 若某 host 未进入 `[mitm]`，先看 `dist/mitm-filter-report.md` 的来源和是否被 QX-safe 过滤
+
+5. 规范化维护
+   - `npm run mitm:normalize`
+   - 统一 `mitmHosts` 的大小写、去重与排序
 
 本地建议流程：
 
 ```bash
+npm run mitm:normalize
 npm run validate
 npm run check:mitm
 npm run build
