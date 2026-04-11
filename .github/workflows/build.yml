@@ -48,13 +48,25 @@ jobs:
       - name: Benchmark threshold gate
         run: npm run check:benchmark
 
+      - name: Prepare base dist for PR diff
+        if: github.event_name == 'pull_request'
+        run: |
+          rm -rf /tmp/base-dist /tmp/base-worktree
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git worktree add /tmp/base-worktree origin/${{ github.base_ref }}
+          cd /tmp/base-worktree
+          npm install
+          npm run validate
+          npm run check:mitm
+          npm run build
+          cp -R dist /tmp/base-dist
+          git worktree remove /tmp/base-worktree --force
+
       - name: MITM summary (PR)
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
-          git show origin/${{ github.base_ref }}:dist/rewrite.conf > /tmp/rewrite.before.conf || true
-          if [ -s /tmp/rewrite.before.conf ]; then
-            node scripts/diff-mitm-summary.js /tmp/rewrite.before.conf dist/rewrite.conf dist/mitm-filter-report.md | tee /tmp/mitm-summary.md
+          if [ -s /tmp/base-dist/rewrite.conf ]; then
+            node scripts/diff-mitm-summary.js /tmp/base-dist/rewrite.conf dist/rewrite.conf dist/mitm-filter-report.md | tee /tmp/mitm-summary.md
             {
               echo "### MITM Summary"
               echo
@@ -67,10 +79,8 @@ jobs:
       - name: MITM host diff (PR)
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
-          git show origin/${{ github.base_ref }}:dist/rewrite.conf > /tmp/rewrite.before.conf || true
-          if [ -s /tmp/rewrite.before.conf ]; then
-            node scripts/diff-mitm.js /tmp/rewrite.before.conf dist/rewrite.conf | tee /tmp/mitm-diff.md
+          if [ -s /tmp/base-dist/rewrite.conf ]; then
+            node scripts/diff-mitm.js /tmp/base-dist/rewrite.conf dist/rewrite.conf | tee /tmp/mitm-diff.md
             {
               echo "### MITM Host Diff"
               echo
