@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/build.js
-// 构建脚本 - 生成 Unified_VIP_Unlock_Manager_v22.js 和 rewrite.conf
+// 构建脚本 - 生成生产版/调试版 JS 与 rewrite.conf
 
 const fs = require('fs');
 const path = require('path');
@@ -76,58 +76,9 @@ function loadModule(filename) {
 // ==========================================
 // 主构建流程
 // ==========================================
-function build() {
-  console.log(`\n🔨 构建 UnifiedVIP v${BUILD_CONFIG.VERSION}`);
-  console.log(`   诊断功能: ${BUILD_CONFIG.ENABLE_DIAGNOSE ? '✅ 启用' : '❌ 禁用'}`);
-  console.log(`   DEBUG模式: ${BUILD_CONFIG.DEBUG_MODE ? '✅ 启用' : '❌ 禁用'}`);
-  console.log(`   压缩级别: ${BUILD_CONFIG.COMPACT_LEVEL || 'safe'}\n`);
-
-  // 步骤 1: 读取配置
-  console.log('📦 步骤 1: 读取配置...');
-  let allConfigs;
-  try {
-    allConfigs = getAllConfigs();
-    console.log(`   ✅ 成功读取 ${Object.keys(allConfigs).length} 个配置`);
-  } catch (e) {
-    console.error(`   ❌ 读取配置失败: ${e.message}`);
-    process.exit(1);
-  }
-
-  // 步骤 2: 生成 configs
-  console.log('📦 步骤 2: 生成 configs/*.json...');
-  let count = 0;
-  for (const [appId, config] of Object.entries(allConfigs)) {
-    const jsonContent = JSON.stringify(config, null, 2);
-    fs.writeFileSync(path.join(CONFIGS_DIR, `${appId}.json`), jsonContent);
-    fs.writeFileSync(path.join(DIST_DIR, 'configs', `${appId}.json`), jsonContent);
-    count++;
-  }
-  console.log(`   ✅ 生成 ${count} 个配置文件`);
-
-  // 步骤 3: 加载核心模块
-  console.log('📦 步骤 3: 加载核心模块...');
-  const modules = {
-    logger: loadModule('core/logger.js'),
-    storage: loadModule('core/storage.js'),
-    http: loadModule('core/http.js'),
-    utils: loadModule('core/utils.js'),
-    regexPool: loadModule('engine/regex-pool.js'),
-    processorFactory: loadModule('engine/processor-factory.js'),
-    compiler: loadModule('engine/compiler.js'),
-    manifestLoader: loadModule('engine/manifest-loader.js'),
-    configLoader: loadModule('engine/config-loader.js'),
-    vipEngine: loadModule('engine/vip-engine.js')
-  };
-  console.log('   ✅ 加载 10 个核心模块');
-
-  // 步骤 4: 组装主脚本
-  console.log('📦 步骤 4: 组装主脚本...');
-  if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
-    console.log('   ℹ️ 诊断函数已启用');
-  }
-
+function buildScriptArtifact({ BUILD_CONFIG, APP_REGISTRY, modules, prefixIndex, filename }) {
   const manifestStr = BuildGenerators.generateManifestOneLine({ APP_REGISTRY, CONFIGS_DIR, BUILD_CONFIG });
-  const prefixCode = BuildGenerators.generatePrefixIndexCode(generatePrefixIndex());
+  const prefixCode = BuildGenerators.generatePrefixIndexCode(prefixIndex);
   const diagnoseCode = BuildGenerators.generateDiagnoseFunction(BUILD_CONFIG);
 
   const fullScript = `${BuildGenerators.generateHeaderMinified({ BUILD_CONFIG, APP_REGISTRY })}
@@ -222,7 +173,6 @@ async function main(){
     const cfg = await cl.load(cid,mf.getConfigVersion(cid));
     const env=new Environment(META.name);
 
-    // 最安全复用：仅复用空闲 VipEngine；并发时自动退化为新建，避免状态污染
     let eng = g.__UVIP_ENG_IDLE || null;
     if (eng) {
       g.__UVIP_ENG_IDLE = null;
@@ -234,7 +184,6 @@ async function main(){
 
     const res=await eng.process(resp?resp.body:'',cfg);
 
-    // 归还空闲实例（若槽位已被占用则丢弃）
     if (!g.__UVIP_ENG_IDLE) {
       eng.env = null;
       eng._requestId = '';
@@ -252,10 +201,6 @@ async function main(){
 main();
 `;
 
-  // 步骤 5: 写入构建产物
-  console.log('📦 步骤 5: 写入构建产物...');
-
-  // L5: 构建产物压缩（可配置）
   function compactByLevel(script, level) {
     const lv = String(level || 'safe').toLowerCase();
     if (lv === 'off') return script;
@@ -265,25 +210,102 @@ main();
       .map(line => line.replace(/[ \t]+$/g, ''))
       .filter(line => !/^\s*\/\//.test(line));
 
-    if (lv === 'aggressive') {
-      return lines.filter(line => line !== '').join('\n');
-    }
-
-    // safe(default): 合并连续空行
-    return lines
-      .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
-      .join('\n');
+    if (lv === 'aggressive') return lines.filter(line => line !== '').join('\n');
+    return lines.filter((line, i, arr) => !(line === '' && arr[i - 1] === '')).join('\n');
   }
 
   const compactScript = compactByLevel(fullScript, BUILD_CONFIG.COMPACT_LEVEL);
-
-  const outputPath = path.join(DIST_DIR, 'Unified_VIP_Unlock_Manager_v22.js');
+  const outputPath = path.join(DIST_DIR, filename);
   fs.writeFileSync(outputPath, compactScript);
   const scriptSize = (fs.statSync(outputPath).size / 1024).toFixed(2);
-  console.log(`   ✅ Unified_VIP_Unlock_Manager_v22.js (${scriptSize} KB)`);
+  return { outputPath, scriptSize };
+}
 
-  // 验证
-  const scriptContent = fs.readFileSync(outputPath, 'utf8');
+function build() {
+  console.log(`\n🔨 构建 UnifiedVIP v${BUILD_CONFIG.VERSION}`);
+  console.log(`   诊断功能: ${BUILD_CONFIG.ENABLE_DIAGNOSE ? '✅ 启用' : '❌ 禁用'}`);
+  console.log(`   DEBUG模式: ${BUILD_CONFIG.DEBUG_MODE ? '✅ 启用' : '❌ 禁用'}`);
+  console.log(`   压缩级别: ${BUILD_CONFIG.COMPACT_LEVEL || 'safe'}\n`);
+
+  // 步骤 1: 读取配置
+  console.log('📦 步骤 1: 读取配置...');
+  let allConfigs;
+  try {
+    allConfigs = getAllConfigs();
+    console.log(`   ✅ 成功读取 ${Object.keys(allConfigs).length} 个配置`);
+  } catch (e) {
+    console.error(`   ❌ 读取配置失败: ${e.message}`);
+    process.exit(1);
+  }
+
+  // 步骤 2: 生成 configs
+  console.log('📦 步骤 2: 生成 configs/*.json...');
+  let count = 0;
+  for (const [appId, config] of Object.entries(allConfigs)) {
+    const jsonContent = JSON.stringify(config, null, 2);
+    fs.writeFileSync(path.join(CONFIGS_DIR, `${appId}.json`), jsonContent);
+    fs.writeFileSync(path.join(DIST_DIR, 'configs', `${appId}.json`), jsonContent);
+    count++;
+  }
+  console.log(`   ✅ 生成 ${count} 个配置文件`);
+
+  // 步骤 3: 加载核心模块
+  console.log('📦 步骤 3: 加载核心模块...');
+  const modules = {
+    logger: loadModule('core/logger.js'),
+    storage: loadModule('core/storage.js'),
+    http: loadModule('core/http.js'),
+    utils: loadModule('core/utils.js'),
+    regexPool: loadModule('engine/regex-pool.js'),
+    processorFactory: loadModule('engine/processor-factory.js'),
+    compiler: loadModule('engine/compiler.js'),
+    manifestLoader: loadModule('engine/manifest-loader.js'),
+    configLoader: loadModule('engine/config-loader.js'),
+    vipEngine: loadModule('engine/vip-engine.js')
+  };
+  console.log('   ✅ 加载 10 个核心模块');
+
+  // 步骤 4: 组装主脚本
+  console.log('📦 步骤 4: 组装主脚本...');
+
+  const prefixIndex = generatePrefixIndex();
+  const productionConfig = {
+    ...BUILD_CONFIG,
+    DEBUG_MODE: false,
+    ENABLE_DIAGNOSE: false
+  };
+  const debugConfig = {
+    ...BUILD_CONFIG,
+    DEBUG_MODE: true,
+    ENABLE_DIAGNOSE: true,
+    VERSION_TAG: BUILD_CONFIG.VERSION_TAG ? `${BUILD_CONFIG.VERSION_TAG}-debug` : 'debug'
+  };
+
+  console.log('   ℹ️ 生产版: DEBUG=off, diagnose=off');
+  console.log('   ℹ️ 调试版: DEBUG=on, diagnose=on');
+
+  // 步骤 5: 写入构建产物
+  console.log('📦 步骤 5: 写入构建产物...');
+
+  const production = buildScriptArtifact({
+    BUILD_CONFIG: productionConfig,
+    APP_REGISTRY,
+    modules,
+    prefixIndex,
+    filename: 'Unified_VIP_Unlock_Manager_v22.js'
+  });
+  console.log(`   ✅ Unified_VIP_Unlock_Manager_v22.js (${production.scriptSize} KB)`);
+
+  const debug = buildScriptArtifact({
+    BUILD_CONFIG: debugConfig,
+    APP_REGISTRY,
+    modules,
+    prefixIndex,
+    filename: 'Unified_VIP_Unlock_Manager_v22.debug.js'
+  });
+  console.log(`   ✅ Unified_VIP_Unlock_Manager_v22.debug.js (${debug.scriptSize} KB)`);
+
+  const scriptContent = fs.readFileSync(production.outputPath, 'utf8');
 
   // 验证 tv pattern
   const tvMatch = scriptContent.match(/"tv":\{"name":"([^"]*)","urlPattern":"([^"]+)"/);
@@ -333,6 +355,7 @@ main();
 
   const configCount = fs.readdirSync(path.join(DIST_DIR, 'configs')).filter(f => f.endsWith('.json')).length;
   console.log(`   📦 configs/*.json (${configCount} 个)`);
+  console.log('   🛠️  调试版脚本: Unified_VIP_Unlock_Manager_v22.debug.js');
 
   if (BUILD_CONFIG.ENABLE_DIAGNOSE) {
     console.log('\n📋 诊断功能说明:');

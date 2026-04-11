@@ -1,12 +1,12 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-04-11T02:52:22.292Z
+ * 构建时间: 2026-04-11T02:52:22.365Z
  * APP数量: 25
  * ==========================================
  *
  * 订阅规则: https://joeshu.github.io/UnifiedVIP/rewrite.conf
-
+ * 诊断功能: 在 QX 控制台运行 diagnose() 查看详细匹配信息
  */
 
 'use strict';
@@ -19,8 +19,8 @@ const CONFIG = {
   MAX_BODY_SIZE: 5 * 1024 * 1024,
   MAX_PROCESSORS_PER_REQUEST: 30,
   TIMEOUT: 10,
-  DEBUG: false,
-  VERBOSE_PATTERN_LOG: false,
+  DEBUG: true,
+  VERBOSE_PATTERN_LOG: true,
 
   URL_CACHE_KEY: 'url_match_v22_lazy',
   URL_CACHE_META_KEY: 'url_match_v22_lazy_meta',
@@ -150,7 +150,20 @@ function hostCacheSet(h,v){if(HOST_MATCH_CACHE.has(h))HOST_MATCH_CACHE.delete(h)
 function findBySuffixFast(h){const lastDot=h.lastIndexOf(".");if(lastDot<=0||lastDot>=h.length-1)return null;const prevDot=h.lastIndexOf(".",lastDot-1);const suffix=prevDot>=0?h.slice(prevDot+1):h;const ids=PREFIX_INDEX.suffix[suffix];return ids?{ids,method:"suffix",matched:suffix}:null}
 function findByPrefix(hostname){const h=hostname.toLowerCase();const c=hostCacheGet(h);if(c!==undefined)return c;let out=null;if(PREFIX_INDEX.exact[h])out={ids:PREFIX_INDEX.exact[h],method:'exact',matched:h};else{out=findBySuffixFast(h);if(!out){const seen2=Object.create(null);for(let i=0;i<h.length-1;i++){const a=h[i],b=h[i+1];if(a==='.'||a==='-'||a==='_')continue;if(b==='.'||b==='-'||b==='_')continue;const k2=a+b;if(seen2[k2])continue;seen2[k2]=1;const grouped=PREFIX_KEYWORDS_BY_HEAD2[k2];if(!grouped)continue;const lens=Object.keys(grouped).sort((x,y)=>Number(y)-Number(x));for(const lenKey of lens){if(Number(lenKey)>h.length)continue;for(const[kw,ids]of grouped[lenKey]){if(h.includes(kw)){out={ids,method:'keyword',matched:kw};break}}if(out)break}if(out)break}}}hostCacheSet(h,out);return out}
 
-const Logger = { info: () => {}, error: () => {}, debug: () => {}, warn: () => {} };
+function _log(level, tag, msg) {
+  if (typeof CONFIG === 'undefined' || !CONFIG.DEBUG) return;
+  if (level === 'debug' && !CONFIG.VERBOSE_PATTERN_LOG) return;
+  const ts = new Date().toISOString().split('T')[1].split('.')[0];
+  const prefix = `[${ts}][${tag}]`;
+  try { console.log(`${prefix} ${msg}`); } catch (e) {}
+}
+
+const Logger = {
+  info:  (tag, msg) => _log('info', tag, msg),
+  error: (tag, msg) => _log('error', tag, msg),
+  debug: (tag, msg) => _log('debug', tag, msg),
+  warn:  (tag, msg) => _log('warn', tag, msg)
+};
 
 const Storage = (() => {
   const KEY = 'vip_v22_data';
@@ -1296,6 +1309,8 @@ class VipEngine {
     return { body: modified };
   }
 }
+
+function diagnose(urlToTest){const testUrls=urlToTest?[urlToTest]:["https://yz1018.6vh3qyu9x.com/v2/api/basic/init","https://www.v2ex.com/t/1201518","https://api.gotokeep.com/nuocha/plans"];console.log("\nUnifiedVIP 诊断工具 v22.0.0");for(const url of testUrls){try{const hostname=new URL(url).hostname;console.log("URL:",url,"HOST:",hostname);const result=typeof findByPrefix==='function'?findByPrefix(hostname):null;console.log("prefix:",result||'null')}catch(e){console.log("error:",e.message)}}return {success:true}}
 
 async function main(){
   const rid=Math.random().toString(36).substr(2,6).toUpperCase();
