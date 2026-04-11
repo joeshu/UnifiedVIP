@@ -18,23 +18,53 @@ class SimpleManifestLoader {
     return this._createProxy();
   }
 
-  _extractHostname(url) {
+  _normalizeMeta(input, meta) {
+    if (meta && typeof meta === 'object' && meta.url) {
+      return meta;
+    }
+
+    const url = typeof input === 'string'
+      ? input
+      : (input && typeof input === 'object' && input.url ? String(input.url) : '');
+
+    if (!url) return { url: '', hostname: '', pathname: '', search: '' };
+
     try {
-      const m = url.match(/^https?:\/\/([^\/\?#]+)/);
-      return m ? m[1].toLowerCase() : url;
+      const parsed = new URL(url);
+      return {
+        url,
+        hostname: (parsed.hostname || '').toLowerCase(),
+        pathname: parsed.pathname || '',
+        search: parsed.search || ''
+      };
     } catch (e) {
-      return url;
+      const m = url.match(/^https?:\/\/([^\/\?#]+)([^\?#]*)?(\?[^#]*)?/i);
+      return {
+        url,
+        hostname: m && m[1] ? m[1].toLowerCase() : url,
+        pathname: m && m[2] ? m[2] : '',
+        search: m && m[3] ? m[3] : ''
+      };
+    }
+  }
+
+  _remember(cacheKey, value) {
+    this._memoizedMatches.set(cacheKey, value);
+    if (this._memoizedMatches.size > this._maxMemoizedMatchesSize) {
+      const firstKey = this._memoizedMatches.keys().next().value;
+      this._memoizedMatches.delete(firstKey);
     }
   }
 
   _createProxy() {
     const self = this;
     return {
-      findMatch: (url) => {
-        if (!url) return null;
+      findMatch: (input, meta) => {
+        const requestMeta = self._normalizeMeta(input, meta);
+        if (!requestMeta.url) return null;
 
         // 优化：用 hostname 做缓存 key（同一 host 的请求复用结果）
-        const cacheKey = self._extractHostname(url);
+        const cacheKey = requestMeta.hostname || requestMeta.url;
 
         if (self._memoizedMatches.has(cacheKey)) {
           return self._memoizedMatches.get(cacheKey);
@@ -43,10 +73,9 @@ class SimpleManifestLoader {
         let ids = null;
 
         // 优先使用构建时生成的 findByPrefix（exact → suffix → keyword 三级匹配）
-        if (self._findByPrefix) {
+        if (self._findByPrefix && requestMeta.hostname) {
           try {
-            const hostname = self._extractHostname(url);
-            const result = self._findByPrefix(hostname);
+            const result = self._findByPrefix(requestMeta.hostname);
             if (result && result.ids) ids = result.ids;
           } catch (e) {}
         }
@@ -66,21 +95,13 @@ class SimpleManifestLoader {
               continue;
             }
           }
-          if (regex && regex.test(url)) {
-            self._memoizedMatches.set(cacheKey, id);
-            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-              const firstKey = self._memoizedMatches.keys().next().value;
-              self._memoizedMatches.delete(firstKey);
-            }
+          if (regex && regex.test(requestMeta.url)) {
+            self._remember(cacheKey, id);
             return id;
           }
         }
 
-        self._memoizedMatches.set(cacheKey, null);
-        if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-          const firstKey = self._memoizedMatches.keys().next().value;
-          self._memoizedMatches.delete(firstKey);
-        }
+        self._remember(cacheKey, null);
         return null;
       },
 

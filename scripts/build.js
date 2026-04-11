@@ -153,16 +153,27 @@ async function main(){
     const resp=(typeof $response!=='undefined'&&$response)?$response:null;
     const doneFallback=()=>$done(resp?{body:resp.body}:{});
     let u='';
-    if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
+    const req=(typeof $request!=='undefined')?$request:null;
+    if(req)u=typeof req==='string'?req:req.url||'';
     else if(resp)u=resp.url||'';
     if(!u)return doneFallback();
 
-    Logger.debug('Main',rid+'|'+u.split('?')[0].substring(0,60));
+    let meta={url:u,hostname:'',pathname:'',search:'',method:req&&typeof req==='object'&&req.method?String(req.method).toUpperCase():'',hasResponse:!!resp,contentType:''};
+    try{
+      const p=new URL(u);
+      meta.hostname=(p.hostname||'').toLowerCase();
+      meta.pathname=p.pathname||'';
+      meta.search=p.search||'';
+    }catch(e){}
+    const headers=(resp&&resp.headers)||(req&&typeof req==='object'&&req.headers)||{};
+    for(const k in headers){if(String(k).toLowerCase()==='content-type'){meta.contentType=String(headers[k]||'');break}}
+
+    Logger.debug('Main',rid+'|'+(meta.pathname||u.split('?')[0]).substring(0,60));
 
     const g = (typeof globalThis !== 'undefined') ? globalThis : {};
     const ml = g.__UVIP_ML || (g.__UVIP_ML = new SimpleManifestLoader('GLOBAL'));
     const mf = g.__UVIP_MF || (g.__UVIP_MF = await ml.load());
-    const cid = mf.findMatch(u);
+    const cid = mf.findMatch(meta.url, meta);
 
     if(!cid){
       Logger.debug('Main','No match');
@@ -171,7 +182,7 @@ async function main(){
 
     const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
     const cfg = await cl.load(cid,mf.getConfigVersion(cid));
-    const env=new Environment(META.name);
+    const env=new Environment(META.name,meta);
 
     let eng = g.__UVIP_ENG_IDLE || null;
     if (eng) {
@@ -345,17 +356,17 @@ function build() {
   const rewriteDebugSize = (fs.statSync(rewriteDebugPath).size / 1024).toFixed(2);
   console.log(`   ✅ rewrite.debug.conf (${rewriteDebugSize} KB)`);
 
-  const bench = spawnSync(process.execPath, [path.join(__dirname, 'benchmark-prefix.js'), '--full'], {
+  const bench = spawnSync(process.execPath, [path.join(__dirname, 'benchmark-prefix.js'), '--fast'], {
     cwd: path.join(__dirname, '..'),
     encoding: 'utf8'
   });
   if (bench.status !== 0) {
-    console.error('   ❌ benchmark:prefix --full 失败');
+    console.error('   ❌ benchmark:prefix --fast 失败');
     if (bench.stdout) console.error(bench.stdout);
     if (bench.stderr) console.error(bench.stderr);
     process.exit(1);
   }
-  console.log('   ✅ benchmark-prefix.md / benchmark-prefix.json 已更新');
+  console.log('   ✅ benchmark-prefix fast 结果已更新（JSON 已写入，完整 Markdown 请手动运行 --full）');
 
   console.log('\n📋 构建完成：');
   const distFiles = fs.readdirSync(DIST_DIR);

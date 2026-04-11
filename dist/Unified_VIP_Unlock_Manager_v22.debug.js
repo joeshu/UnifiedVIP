@@ -1,7 +1,7 @@
 /*
  * ==========================================
  * Unified VIP Unlock Manager v22.0.0
- * 构建时间: 2026-04-11T03:05:38.212Z
+ * 构建时间: 2026-04-11T04:25:31.294Z
  * APP数量: 25
  * ==========================================
  *
@@ -774,22 +774,52 @@ class SimpleManifestLoader {
     return this._createProxy();
   }
 
-  _extractHostname(url) {
+  _normalizeMeta(input, meta) {
+    if (meta && typeof meta === 'object' && meta.url) {
+      return meta;
+    }
+
+    const url = typeof input === 'string'
+      ? input
+      : (input && typeof input === 'object' && input.url ? String(input.url) : '');
+
+    if (!url) return { url: '', hostname: '', pathname: '', search: '' };
+
     try {
-      const m = url.match(/^https?:\/\/([^\/\?#]+)/);
-      return m ? m[1].toLowerCase() : url;
+      const parsed = new URL(url);
+      return {
+        url,
+        hostname: (parsed.hostname || '').toLowerCase(),
+        pathname: parsed.pathname || '',
+        search: parsed.search || ''
+      };
     } catch (e) {
-      return url;
+      const m = url.match(/^https?:\/\/([^\/\?#]+)([^\?#]*)?(\?[^#]*)?/i);
+      return {
+        url,
+        hostname: m && m[1] ? m[1].toLowerCase() : url,
+        pathname: m && m[2] ? m[2] : '',
+        search: m && m[3] ? m[3] : ''
+      };
+    }
+  }
+
+  _remember(cacheKey, value) {
+    this._memoizedMatches.set(cacheKey, value);
+    if (this._memoizedMatches.size > this._maxMemoizedMatchesSize) {
+      const firstKey = this._memoizedMatches.keys().next().value;
+      this._memoizedMatches.delete(firstKey);
     }
   }
 
   _createProxy() {
     const self = this;
     return {
-      findMatch: (url) => {
-        if (!url) return null;
+      findMatch: (input, meta) => {
+        const requestMeta = self._normalizeMeta(input, meta);
+        if (!requestMeta.url) return null;
 
-        const cacheKey = self._extractHostname(url);
+        const cacheKey = requestMeta.hostname || requestMeta.url;
 
         if (self._memoizedMatches.has(cacheKey)) {
           return self._memoizedMatches.get(cacheKey);
@@ -797,10 +827,9 @@ class SimpleManifestLoader {
 
         let ids = null;
 
-        if (self._findByPrefix) {
+        if (self._findByPrefix && requestMeta.hostname) {
           try {
-            const hostname = self._extractHostname(url);
-            const result = self._findByPrefix(hostname);
+            const result = self._findByPrefix(requestMeta.hostname);
             if (result && result.ids) ids = result.ids;
           } catch (e) {}
         }
@@ -819,21 +848,13 @@ class SimpleManifestLoader {
               continue;
             }
           }
-          if (regex && regex.test(url)) {
-            self._memoizedMatches.set(cacheKey, id);
-            if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-              const firstKey = self._memoizedMatches.keys().next().value;
-              self._memoizedMatches.delete(firstKey);
-            }
+          if (regex && regex.test(requestMeta.url)) {
+            self._remember(cacheKey, id);
             return id;
           }
         }
 
-        self._memoizedMatches.set(cacheKey, null);
-        if (self._memoizedMatches.size > self._maxMemoizedMatchesSize) {
-          const firstKey = self._memoizedMatches.keys().next().value;
-          self._memoizedMatches.delete(firstKey);
-        }
+        self._remember(cacheKey, null);
         return null;
       },
 
@@ -980,7 +1001,7 @@ class SimpleConfigLoader {
 }
 
 class Environment {
-  constructor(name) {
+  constructor(name, presetMeta) {
     this.name = name;
     this.isQX = true;
 
@@ -990,14 +1011,75 @@ class Environment {
     if (!this.request.url && this.response && this.response.request) {
       this.request = this.response.request;
     }
+
+    this._meta = presetMeta || null;
+    this._url = presetMeta && presetMeta.url ? String(presetMeta.url) : null;
   }
 
-  getUrl() {
+  _ensureMeta() {
+    if (this._meta) return this._meta;
+
     let url = (this.response && this.response.url) || (this.request && this.request.url) || '';
     if (typeof $request === 'string') {
       url = $request;
     }
-    return url.toString();
+    url = url ? url.toString() : '';
+
+    let hostname = '';
+    let pathname = '';
+    let search = '';
+    try {
+      const parsed = new URL(url);
+      hostname = (parsed.hostname || '').toLowerCase();
+      pathname = parsed.pathname || '';
+      search = parsed.search || '';
+    } catch (e) {}
+
+    const headers = (this.response && this.response.headers) || (this.request && this.request.headers) || {};
+    let contentType = '';
+    for (const [k, v] of Object.entries(headers || {})) {
+      if (String(k).toLowerCase() === 'content-type') {
+        contentType = String(v || '');
+        break;
+      }
+    }
+
+    this._url = url;
+    this._meta = {
+      url,
+      hostname,
+      pathname,
+      search,
+      method: (this.request && this.request.method) ? String(this.request.method).toUpperCase() : '',
+      hasResponse: !!(this.response && Object.keys(this.response).length),
+      contentType
+    };
+    return this._meta;
+  }
+
+  getUrl() {
+    if (this._url != null) return this._url;
+    return this._ensureMeta().url || '';
+  }
+
+  getHostname() {
+    return this._ensureMeta().hostname || '';
+  }
+
+  getPathname() {
+    return this._ensureMeta().pathname || '';
+  }
+
+  getSearch() {
+    return this._ensureMeta().search || '';
+  }
+
+  getContentType() {
+    return this._ensureMeta().contentType || '';
+  }
+
+  isResponsePhase() {
+    return !!this._ensureMeta().hasResponse;
   }
 
   getBody() {
@@ -1024,8 +1106,10 @@ class VipEngine {
   }
 
   async process(body, config) {
+    const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
+
     if (!config || !config.mode) {
-      return { body: typeof body === 'string' ? body : Utils.safeJsonStringify(body || {}) };
+      return { body: normalizedBody };
     }
 
     if (config.mode === 'forward') {
@@ -1035,23 +1119,41 @@ class VipEngine {
       return await this._processRemote(config);
     }
 
-    const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
     if (!normalizedBody) return { body: '{}' };
+
+    const contentType = this.env && this.env.getContentType ? String(this.env.getContentType() || '').toLowerCase() : '';
 
     switch (config.mode) {
       case 'json':
+        if (!this._looksLikeJsonBody(normalizedBody, contentType)) return { body: normalizedBody };
         return this._processJson(normalizedBody, config);
       case 'regex':
+        if (!(config._regexReplacements || config.regexReplacements || []).length) return { body: normalizedBody };
         return this._processRegex(normalizedBody, config);
       case 'game':
+        if (!(config._gameResources || config.gameResources || []).length) return { body: normalizedBody };
         return this._processGame(normalizedBody, config);
       case 'hybrid':
-        return this._processHybrid(normalizedBody, config);
+        return this._processHybrid(normalizedBody, config, contentType);
       case 'html':
+        if (!this._looksLikeHtmlBody(normalizedBody, contentType)) return { body: normalizedBody };
         return this._processHtml(normalizedBody, config);
       default:
         return { body: normalizedBody };
     }
+  }
+
+  _looksLikeJsonBody(body, contentType) {
+    if (!body) return false;
+    const firstChar = body[0];
+    if (firstChar === '{' || firstChar === '[') return true;
+    return contentType.includes('json') || contentType.includes('+json');
+  }
+
+  _looksLikeHtmlBody(body, contentType) {
+    if (!body) return false;
+    if (body.indexOf('<') >= 0) return true;
+    return contentType.includes('html') || contentType.includes('xml') || contentType.includes('text/');
   }
 
   async _processForward(config) {
@@ -1277,8 +1379,10 @@ class VipEngine {
     return { body: modified };
   }
 
-  _processHybrid(body, config) {
-    let result = this._processJson(body, config);
+  _processHybrid(body, config, contentType) {
+    let result = this._looksLikeJsonBody(body, contentType || '')
+      ? this._processJson(body, config)
+      : { body };
 
     if (config._regexReplacements || config.regexReplacements) {
       result = this._processRegex(result.body, config);
@@ -1318,16 +1422,27 @@ async function main(){
     const resp=(typeof $response!=='undefined'&&$response)?$response:null;
     const doneFallback=()=>$done(resp?{body:resp.body}:{});
     let u='';
-    if(typeof $request!=='undefined')u=typeof $request==='string'?$request:$request.url||'';
+    const req=(typeof $request!=='undefined')?$request:null;
+    if(req)u=typeof req==='string'?req:req.url||'';
     else if(resp)u=resp.url||'';
     if(!u)return doneFallback();
 
-    Logger.debug('Main',rid+'|'+u.split('?')[0].substring(0,60));
+    let meta={url:u,hostname:'',pathname:'',search:'',method:req&&typeof req==='object'&&req.method?String(req.method).toUpperCase():'',hasResponse:!!resp,contentType:''};
+    try{
+      const p=new URL(u);
+      meta.hostname=(p.hostname||'').toLowerCase();
+      meta.pathname=p.pathname||'';
+      meta.search=p.search||'';
+    }catch(e){}
+    const headers=(resp&&resp.headers)||(req&&typeof req==='object'&&req.headers)||{};
+    for(const k in headers){if(String(k).toLowerCase()==='content-type'){meta.contentType=String(headers[k]||'');break}}
+
+    Logger.debug('Main',rid+'|'+(meta.pathname||u.split('?')[0]).substring(0,60));
 
     const g = (typeof globalThis !== 'undefined') ? globalThis : {};
     const ml = g.__UVIP_ML || (g.__UVIP_ML = new SimpleManifestLoader('GLOBAL'));
     const mf = g.__UVIP_MF || (g.__UVIP_MF = await ml.load());
-    const cid = mf.findMatch(u);
+    const cid = mf.findMatch(meta.url, meta);
 
     if(!cid){
       Logger.debug('Main','No match');
@@ -1336,7 +1451,7 @@ async function main(){
 
     const cl = g.__UVIP_CL || (g.__UVIP_CL = new SimpleConfigLoader('GLOBAL'));
     const cfg = await cl.load(cid,mf.getConfigVersion(cid));
-    const env=new Environment(META.name);
+    const env=new Environment(META.name,meta);
 
     let eng = g.__UVIP_ENG_IDLE || null;
     if (eng) {

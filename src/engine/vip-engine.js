@@ -5,7 +5,7 @@
 // Environment 类
 // ==========================================
 class Environment {
-  constructor(name) {
+  constructor(name, presetMeta) {
     this.name = name;
     this.isQX = true;
 
@@ -15,14 +15,75 @@ class Environment {
     if (!this.request.url && this.response && this.response.request) {
       this.request = this.response.request;
     }
+
+    this._meta = presetMeta || null;
+    this._url = presetMeta && presetMeta.url ? String(presetMeta.url) : null;
   }
 
-  getUrl() {
+  _ensureMeta() {
+    if (this._meta) return this._meta;
+
     let url = (this.response && this.response.url) || (this.request && this.request.url) || '';
     if (typeof $request === 'string') {
       url = $request;
     }
-    return url.toString();
+    url = url ? url.toString() : '';
+
+    let hostname = '';
+    let pathname = '';
+    let search = '';
+    try {
+      const parsed = new URL(url);
+      hostname = (parsed.hostname || '').toLowerCase();
+      pathname = parsed.pathname || '';
+      search = parsed.search || '';
+    } catch (e) {}
+
+    const headers = (this.response && this.response.headers) || (this.request && this.request.headers) || {};
+    let contentType = '';
+    for (const [k, v] of Object.entries(headers || {})) {
+      if (String(k).toLowerCase() === 'content-type') {
+        contentType = String(v || '');
+        break;
+      }
+    }
+
+    this._url = url;
+    this._meta = {
+      url,
+      hostname,
+      pathname,
+      search,
+      method: (this.request && this.request.method) ? String(this.request.method).toUpperCase() : '',
+      hasResponse: !!(this.response && Object.keys(this.response).length),
+      contentType
+    };
+    return this._meta;
+  }
+
+  getUrl() {
+    if (this._url != null) return this._url;
+    return this._ensureMeta().url || '';
+  }
+
+  getHostname() {
+    return this._ensureMeta().hostname || '';
+  }
+
+  getPathname() {
+    return this._ensureMeta().pathname || '';
+  }
+
+  getSearch() {
+    return this._ensureMeta().search || '';
+  }
+
+  getContentType() {
+    return this._ensureMeta().contentType || '';
+  }
+
+  isResponsePhase() {
+    return !!this._ensureMeta().hasResponse;
   }
 
   getBody() {
@@ -52,8 +113,10 @@ class VipEngine {
   }
 
   async process(body, config) {
+    const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
+
     if (!config || !config.mode) {
-      return { body: typeof body === 'string' ? body : Utils.safeJsonStringify(body || {}) };
+      return { body: normalizedBody };
     }
 
     // forward/remote 模式不依赖响应 body，必须优先分流，避免空 body 被提前短路
@@ -64,23 +127,41 @@ class VipEngine {
       return await this._processRemote(config);
     }
 
-    const normalizedBody = typeof body === 'string' ? body : Utils.safeJsonStringify(body || {});
     if (!normalizedBody) return { body: '{}' };
+
+    const contentType = this.env && this.env.getContentType ? String(this.env.getContentType() || '').toLowerCase() : '';
 
     switch (config.mode) {
       case 'json':
+        if (!this._looksLikeJsonBody(normalizedBody, contentType)) return { body: normalizedBody };
         return this._processJson(normalizedBody, config);
       case 'regex':
+        if (!(config._regexReplacements || config.regexReplacements || []).length) return { body: normalizedBody };
         return this._processRegex(normalizedBody, config);
       case 'game':
+        if (!(config._gameResources || config.gameResources || []).length) return { body: normalizedBody };
         return this._processGame(normalizedBody, config);
       case 'hybrid':
-        return this._processHybrid(normalizedBody, config);
+        return this._processHybrid(normalizedBody, config, contentType);
       case 'html':
+        if (!this._looksLikeHtmlBody(normalizedBody, contentType)) return { body: normalizedBody };
         return this._processHtml(normalizedBody, config);
       default:
         return { body: normalizedBody };
     }
+  }
+
+  _looksLikeJsonBody(body, contentType) {
+    if (!body) return false;
+    const firstChar = body[0];
+    if (firstChar === '{' || firstChar === '[') return true;
+    return contentType.includes('json') || contentType.includes('+json');
+  }
+
+  _looksLikeHtmlBody(body, contentType) {
+    if (!body) return false;
+    if (body.indexOf('<') >= 0) return true;
+    return contentType.includes('html') || contentType.includes('xml') || contentType.includes('text/');
   }
 
   async _processForward(config) {
@@ -307,8 +388,10 @@ class VipEngine {
     return { body: modified };
   }
 
-  _processHybrid(body, config) {
-    let result = this._processJson(body, config);
+  _processHybrid(body, config, contentType) {
+    let result = this._looksLikeJsonBody(body, contentType || '')
+      ? this._processJson(body, config)
+      : { body };
 
     if (config._regexReplacements || config.regexReplacements) {
       result = this._processRegex(result.body, config);
