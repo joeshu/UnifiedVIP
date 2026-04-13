@@ -1,0 +1,40 @@
+{
+  "urlPattern": "^https?:\\/\\/.*v2ex\\.com\\/(?!(?:.*(?:api|login|cdn-cgi|verify|auth|captch|\\.(js|css|jpg|jpeg|png|webp|gif|zip|woff|woff2|m3u8|mp4|mov|m4v|avi|mkv|flv|rmvb|wmv|rm|asf|asx|mp3|json|ico|otf|ttf)))).*$",
+  "mitmHosts": [
+    "v2ex.com",
+    "*.v2ex.com"
+  ],
+  "id": "v2ex",
+  "name": "V2EX去广告",
+  "mode": "html",
+  "htmlMarkers": [
+    "wwads-cn-verify",
+    "cdn.wwads.cn/js/makemoney.js",
+    "googlesyndication.com/pagead/js/adsbygoogle.js",
+    "google-analytics.com/analytics.js",
+    "pro-campaign-container",
+    "class=\"wwads"
+  ],
+  "htmlReplacements": [
+    {
+      "pattern": "<meta[^>]*name=[\"']wwads-cn-verify[\"'][^>]*>|<script[^>]*src=[\"'][^\"']*(?:cdn\\.wwads\\.cn|pagead2\\.googlesyndication\\.com|google-analytics\\.com)[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/script>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "<div[^>]*id=[\"']pro-campaign-container[\"'][^>]*>[\\s\\S]*?</div>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "<div[^>]*class=[\"'][^\"']*wwads[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/div>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "</body>",
+      "replacement": "<script>(function(){var ads=['.sidebar_units','.sidebar_compliance','.wwads','.adsbygoogle','#pro-campaign-container'];for(var i=0;i<ads.length;i++){var list=document.querySelectorAll(ads[i]);for(var j=0;j<list.length;j++){list[j].remove();}}var s=document.querySelectorAll('script[src*=\"cdn.wwads.cn/js/makemoney.js\"],script[src*=\"pagead2.googlesyndication.com/pagead/js/adsbygoogle.js\"],script[src*=\"google-analytics.com/analytics.js\"]');for(var k=0;k<s.length;k++){s[k].remove();}})();</script></body>",
+      "flags": "i"
+    }
+  ]
+}
