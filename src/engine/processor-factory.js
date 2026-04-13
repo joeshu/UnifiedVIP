@@ -24,7 +24,22 @@ function applyCompiledValueSetters(target, compiled, sourceObj) {
       target[item.directKey] = value;
       continue;
     }
-    Utils.setPath(target, item.tokens, value);
+
+    const tokens = item.tokens || [];
+    if (tokens.length === 1 && !tokens[0].isArray) {
+      target[tokens[0].key] = value;
+      continue;
+    }
+    if (tokens.length === 2 && !tokens[0].isArray && !tokens[1].isArray) {
+      const p0 = tokens[0].key;
+      const p1 = tokens[1].key;
+      let node = target[p0];
+      if (node == null || typeof node !== 'object') node = target[p0] = {};
+      node[p1] = value;
+      continue;
+    }
+
+    Utils.setPath(target, tokens, value);
   }
 }
 
@@ -149,23 +164,41 @@ function createProcessorFactory(requestId) {
       const directStatic = compiled.filter(item => item.isDirectKey && item.directKey && !item.isTemplate);
       const directTemplate = compiled.filter(item => item.isDirectKey && item.directKey && item.isTemplate);
       const complex = compiled.filter(item => !item.isDirectKey || !item.directKey);
+      const complexLen = complex.length;
+      const staticLen = directStatic.length;
+      const templateLen = directTemplate.length;
 
       return (obj, env) => {
         const arr = Utils.getPath(obj, arrPathTokens);
         if (!Array.isArray(arr)) return obj;
 
-        for (const itemObj of arr) {
+        if (complexLen === 0 && templateLen === 0) {
+          for (let i = 0; i < arr.length; i++) {
+            const itemObj = arr[i];
+            if (!itemObj || typeof itemObj !== 'object') continue;
+            for (let j = 0; j < staticLen; j++) {
+              const item = directStatic[j];
+              itemObj[item.directKey] = item.value;
+            }
+          }
+          return obj;
+        }
+
+        for (let i = 0; i < arr.length; i++) {
+          const itemObj = arr[i];
           if (!itemObj || typeof itemObj !== 'object') continue;
 
-          for (const item of directStatic) {
+          for (let j = 0; j < staticLen; j++) {
+            const item = directStatic[j];
             itemObj[item.directKey] = item.value;
           }
 
-          for (const item of directTemplate) {
+          for (let j = 0; j < templateLen; j++) {
+            const item = directTemplate[j];
             itemObj[item.directKey] = Utils.resolveTemplate(item.value, itemObj);
           }
 
-          if (complex.length > 0) {
+          if (complexLen > 0) {
             applyCompiledValueSetters(itemObj, complex, itemObj);
           }
         }

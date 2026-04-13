@@ -14,11 +14,27 @@ const { createCompiler } = require('../src/engine/compiler');
 const { SimpleManifestLoader } = require('../src/engine/manifest-loader');
 const { SimpleConfigLoader } = require('../src/engine/config-loader');
 const { Environment, VipEngine } = require('../src/engine/vip-engine');
-const { APP_REGISTRY, getAllConfigs } = require('../src/apps/_index');
+const { APP_REGISTRY } = require('../src/apps/_index');
 const { generateManifestOneLine } = require('./build/generators');
 
 const ROOT = path.join(__dirname, '..');
 const CONFIGS_DIR = path.join(ROOT, 'configs');
+const DIST_JSON_PATH = path.join(ROOT, 'dist', 'benchmark-runtime.json');
+const DOC_MD_PATH = path.join(ROOT, 'docs', 'benchmark-runtime.md');
+
+const FAST_MODE = process.argv.includes('--fast') || !process.argv.includes('--full');
+const MODE = FAST_MODE ? 'fast' : 'full';
+const ROUNDS = FAST_MODE ? 3 : 5;
+const COUNTS = FAST_MODE
+  ? { manifestWarm: 500, manifestCold: 500, configStorage: 20, configMemory: 80, engine: 20, jsonProfile: 20, processor: 20 }
+  : { manifestWarm: 1000, manifestCold: 1000, configStorage: 50, configMemory: 200, engine: 50, jsonProfile: 50, processor: 50 };
+
+const BENCH_TARGETS = {
+  json: { id: 'tophub', url: 'https://api2.tophub.today/account/sync', contentType: 'application/json' },
+  regex: { id: 'keep', url: 'https://api.gotokeep.com/nuocha/plans/', contentType: 'application/json' },
+  html: { id: 'v2ex', url: 'https://www.v2ex.com/t/123456', contentType: 'text/html' },
+  hybrid: { id: 'bxkt', url: 'https://api.banxueketang.com/api/classpal/app/v1', contentType: 'application/json' }
+};
 
 global.Utils = Utils;
 global.RegexPool = RegexPool;
@@ -57,7 +73,7 @@ global.$task = {
 const BUILTIN_MANIFEST_OBJ = JSON.parse(generateManifestOneLine({
   APP_REGISTRY,
   CONFIGS_DIR,
-  BUILD_CONFIG: { VERSION: 'bench' }
+  BUILD_CONFIG: { VERSION: 'bench-runtime' }
 }));
 global.BUILTIN_MANIFEST = BUILTIN_MANIFEST_OBJ;
 
@@ -74,44 +90,42 @@ function makeMeta(url, contentType = 'application/json') {
   };
 }
 
-function bench(name, fn, rounds = 5) {
+function bench(name, fn, rounds = ROUNDS) {
   const times = [];
-  let last = null;
   for (let i = 0; i < rounds; i++) {
     const t0 = performance.now();
-    last = fn();
+    fn();
     times.push(performance.now() - t0);
   }
   const avg = times.reduce((a, b) => a + b, 0) / times.length;
-  const min = Math.min(...times);
-  const max = Math.max(...times);
-  return { name, avg, min, max, last };
+  return { name, avg, min: Math.min(...times), max: Math.max(...times) };
 }
 
-async function benchAsync(name, fn, rounds = 5) {
+async function benchAsync(name, fn, rounds = ROUNDS) {
   const times = [];
-  let last = null;
   for (let i = 0; i < rounds; i++) {
     const t0 = performance.now();
-    last = await fn();
+    await fn();
     times.push(performance.now() - t0);
   }
   const avg = times.reduce((a, b) => a + b, 0) / times.length;
-  const min = Math.min(...times);
-  const max = Math.max(...times);
-  return { name, avg, min, max, last };
+  return { name, avg, min: Math.min(...times), max: Math.max(...times) };
 }
 
-function print(result) {
-  console.log(`${result.name}: avg=${result.avg.toFixed(2)}ms min=${result.min.toFixed(2)} max=${result.max.toFixed(2)}`);
-}
-
-function summarize(result) {
+function summarize(result, count) {
+  const ops = result.avg > 0 ? count / (result.avg / 1000) : 0;
   return {
     avg_ms: Number(result.avg.toFixed(2)),
     min_ms: Number(result.min.toFixed(2)),
-    max_ms: Number(result.max.toFixed(2))
+    max_ms: Number(result.max.toFixed(2)),
+    ops_per_s: Math.round(ops)
   };
+}
+
+function printResult(group, label, result, count) {
+  const s = summarize(result, count);
+  console.log(`${group} ${label}: avg=${s.avg_ms}ms ops/s=${s.ops_per_s}`);
+  return s;
 }
 
 function makeJsonBody(size = 300) {
@@ -126,117 +140,94 @@ function makeJsonBody(size = 300) {
   });
 }
 
-function buildRuntimeReportPath() {
-  return path.join(ROOT, 'dist', 'benchmark-runtime.json');
-}
-
 function makeHtmlBody(size = 200) {
   return `<html><body>${Array.from({ length: size }, (_, i) => `<div class="card">vip-${i}</div>`).join('')}</body></html>`;
-}
-
-function pickBenchConfigs() {
-  const all = getAllConfigs();
-  const values = Object.entries(all);
-  const pick = (mode) => values.find(([, cfg]) => cfg.mode === mode);
-  return {
-    json: pick('json'),
-    regex: pick('regex'),
-    html: pick('html'),
-    hybrid: pick('hybrid')
-  };
 }
 
 function cloneJsonPayload(jsonStr) {
   return JSON.parse(jsonStr);
 }
 
-function buildJsonProfileCase(configLoader, jsonId, jsonBody, env) {
-  return configLoader.load(jsonId, '1.0').then(cfg => {
-    const engine = new VipEngine(env, 'BENCH');
-    const processor = cfg._processor || null;
-    return { cfg, engine, processor };
-  });
+function mustGetConfig(id) {
+  const file = path.join(CONFIGS_DIR, `${id}.json`);
+  if (!fs.existsSync(file)) throw new Error(`missing benchmark config: ${id}`);
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-function makeProcessorBenchmarkCases(factory, compile) {
+function makeProcessorBenchmarkCases(compile) {
   const cases = [];
-
   cases.push({
     label: 'setFields',
-    processor: compile({
-      processor: 'setFields',
-      params: {
-        fields: {
-          'data.vip': true,
-          'data.level': 9,
-          'data.expire': 9999999999
-        }
-      }
-    })
+    processor: compile({ processor: 'setFields', params: { fields: { 'data.vip': true, 'data.level': 9, 'data.expire': 9999999999 } } })
   });
-
   cases.push({
     label: 'mapArray',
-    processor: compile({
-      processor: 'mapArray',
-      params: {
-        path: 'data.list',
-        fields: {
-          flag: true,
-          badge: 'vip'
-        }
-      }
-    })
+    processor: compile({ processor: 'mapArray', params: { path: 'data.list', fields: { flag: true, badge: 'vip' } } })
   });
-
   cases.push({
     label: 'deleteFields',
-    processor: compile({
-      processor: 'deleteFields',
-      params: {
-        paths: ['data.list[0].name', 'data.level']
-      }
-    })
+    processor: compile({ processor: 'deleteFields', params: { paths: ['data.list[0].name', 'data.level'] } })
   });
-
   cases.push({
     label: 'compose',
     processor: compile({
       processor: 'compose',
       params: {
         steps: [
-          {
-            processor: 'setFields',
-            params: {
-              fields: {
-                'data.vip': true,
-                'data.level': 9
-              }
-            }
-          },
-          {
-            processor: 'mapArray',
-            params: {
-              path: 'data.list',
-              fields: {
-                flag: true
-              }
-            }
-          }
+          { processor: 'setFields', params: { fields: { 'data.vip': true, 'data.level': 9 } } },
+          { processor: 'mapArray', params: { path: 'data.list', fields: { flag: true } } }
         ]
       }
     })
   });
-
   return cases.filter(item => typeof item.processor === 'function');
+}
+
+function buildMarkdown(report) {
+  const lines = [
+    '# Runtime Benchmark',
+    '',
+    `- Generated: ${report.generated_at}`,
+    `- Mode: ${report.mode}`,
+    `- Rounds: ${report.rounds}`,
+    `- Targets: json=${report.targets.json}, regex=${report.targets.regex}, html=${report.targets.html}, hybrid=${report.targets.hybrid}`,
+    ''
+  ];
+
+  const sections = [
+    ['Manifest', report.manifest],
+    ['Config Loader', report.config_loader],
+    ['Engine', report.engine],
+    ['JSON Profile', report.json_profile],
+    ['Processor Profile', report.processor_profile]
+  ];
+
+  sections.forEach(([title, obj]) => {
+    lines.push(`## ${title}`);
+    lines.push('');
+    for (const [key, value] of Object.entries(obj || {})) {
+      lines.push(`- ${key}: avg=${value.avg_ms}ms, ops/s=${value.ops_per_s}, min=${value.min_ms}ms, max=${value.max_ms}ms`);
+    }
+    lines.push('');
+  });
+
+  return lines.join('\n');
 }
 
 async function main() {
   console.log('=== UnifiedVIP Runtime Benchmark ===');
-  console.log(`manifest configs=${Object.keys(BUILTIN_MANIFEST_OBJ.configs || {}).length}`);
+  console.log(`mode=${MODE} rounds=${ROUNDS}`);
 
   const report = {
     generated_at: new Date().toISOString(),
+    mode: MODE,
+    rounds: ROUNDS,
+    targets: {
+      json: BENCH_TARGETS.json.id,
+      regex: BENCH_TARGETS.regex.id,
+      html: BENCH_TARGETS.html.id,
+      hybrid: BENCH_TARGETS.hybrid.id
+    },
     manifest: {},
     config_loader: {},
     engine: {},
@@ -244,185 +235,144 @@ async function main() {
     processor_profile: {}
   };
 
+  mustGetConfig(BENCH_TARGETS.json.id);
+  mustGetConfig(BENCH_TARGETS.regex.id);
+  mustGetConfig(BENCH_TARGETS.html.id);
+  mustGetConfig(BENCH_TARGETS.hybrid.id);
+
   const manifestLoader = new SimpleManifestLoader('BENCH');
   const manifest = await manifestLoader.load();
 
-  const urls = [
-    'https://api.gotokeep.com/nuocha/plans',
-    'https://www.v2ex.com/t/123456',
-    'https://theater-api.sylangyue.xyz/api/v1/theater/home',
-    'https://service.hhdd.com/book2'
+  const hotUrls = [
+    BENCH_TARGETS.json.url,
+    BENCH_TARGETS.regex.url,
+    BENCH_TARGETS.html.url,
+    BENCH_TARGETS.hybrid.url
   ];
 
-  console.log('\n--- manifest match ---');
-  const manifestWarm = bench('manifest warm x1000', () => {
-    for (let i = 0; i < 1000; i++) {
-      const url = urls[i % urls.length];
+  console.log('\n--- manifest ---');
+  report.manifest.warm = printResult('manifest', `warm x${COUNTS.manifestWarm}`, bench(`manifest warm x${COUNTS.manifestWarm}`, () => {
+    for (let i = 0; i < COUNTS.manifestWarm; i++) {
+      const url = hotUrls[i % hotUrls.length];
       manifest.findMatch(url, makeMeta(url));
     }
-  }, 5);
-  print(manifestWarm);
-  report.manifest.warm_x1000 = summarize(manifestWarm);
+  }), COUNTS.manifestWarm);
 
-  const manifestCold = bench('manifest cold-ish x1000', () => {
-    for (let i = 0; i < 1000; i++) {
+  report.manifest.coldish = printResult('manifest', `coldish x${COUNTS.manifestCold}`, bench(`manifest coldish x${COUNTS.manifestCold}`, () => {
+    for (let i = 0; i < COUNTS.manifestCold; i++) {
       const url = `https://sub${i}.gotokeep.com/nuocha/plans?i=${i}`;
       manifest.findMatch(url, makeMeta(url));
     }
-  }, 5);
-  print(manifestCold);
-  report.manifest.coldish_x1000 = summarize(manifestCold);
+  }), COUNTS.manifestCold);
 
-  const benchConfigs = pickBenchConfigs();
   const configLoader = new SimpleConfigLoader('BENCH');
+  const jsonCfg = mustGetConfig(BENCH_TARGETS.json.id);
+  const cacheKey = `${BENCH_TARGETS.json.id}@${String(BUILTIN_MANIFEST_OBJ.version || 'v1')}`;
+  const cachePayload = JSON.stringify({ v: '1.0', t: Date.now(), d: jsonCfg });
 
   console.log('\n--- config loader ---');
-  const jsonId = benchConfigs.json ? benchConfigs.json[0] : Object.keys(getAllConfigs())[0];
-  const jsonRaw = getAllConfigs()[jsonId];
-  const cacheKey = `${jsonId}@${String(BUILTIN_MANIFEST_OBJ.version || 'v1')}`;
-  const cachePayload = JSON.stringify({ v: '1.0', t: Date.now(), d: jsonRaw });
-
   prefStore.clear();
-  const storageLoad = await benchAsync('config load from storage x50', async () => {
+  report.config_loader.storage = printResult('config', `storage x${COUNTS.configStorage}`, await benchAsync(`config storage x${COUNTS.configStorage}`, async () => {
     configLoader._memCache.clear();
     prefStore.set('vip_v22_data', JSON.stringify({ [cacheKey]: JSON.parse(cachePayload) }));
-    await configLoader.load(jsonId, '1.0');
-  }, 5);
-  print(storageLoad);
-  report.config_loader.storage_x50 = summarize(storageLoad);
-
-  const memoryLoad = await benchAsync('config load from memory x200', async () => {
-    await configLoader.load(jsonId, '1.0');
-    for (let i = 0; i < 200; i++) {
-      await configLoader.load(jsonId, '1.0');
+    for (let i = 0; i < COUNTS.configStorage; i++) {
+      await configLoader.load(BENCH_TARGETS.json.id, '1.0');
     }
-  }, 5);
-  print(memoryLoad);
-  report.config_loader.memory_x200 = summarize(memoryLoad);
+  }), COUNTS.configStorage);
 
-  console.log('\n--- vip engine process ---');
-  const engineCases = [];
-  if (benchConfigs.json) engineCases.push({ label: 'json', entry: benchConfigs.json, body: makeJsonBody(300), type: 'application/json' });
-  if (benchConfigs.regex) engineCases.push({ label: 'regex', entry: benchConfigs.regex, body: makeJsonBody(200), type: 'application/json' });
-  if (benchConfigs.html) engineCases.push({ label: 'html', entry: benchConfigs.html, body: makeHtmlBody(180), type: 'text/html' });
-  if (benchConfigs.hybrid) engineCases.push({ label: 'hybrid', entry: benchConfigs.hybrid, body: makeJsonBody(250), type: 'application/json' });
+  report.config_loader.memory = printResult('config', `memory x${COUNTS.configMemory}`, await benchAsync(`config memory x${COUNTS.configMemory}`, async () => {
+    await configLoader.load(BENCH_TARGETS.json.id, '1.0');
+    for (let i = 0; i < COUNTS.configMemory; i++) {
+      await configLoader.load(BENCH_TARGETS.json.id, '1.0');
+    }
+  }), COUNTS.configMemory);
+
+  console.log('\n--- engine ---');
+  const engineCases = [
+    { label: 'json', target: BENCH_TARGETS.json, body: makeJsonBody(FAST_MODE ? 160 : 300) },
+    { label: 'regex', target: BENCH_TARGETS.regex, body: makeJsonBody(FAST_MODE ? 120 : 220) },
+    { label: 'html', target: BENCH_TARGETS.html, body: makeHtmlBody(FAST_MODE ? 100 : 180) },
+    { label: 'hybrid', target: BENCH_TARGETS.hybrid, body: makeJsonBody(FAST_MODE ? 140 : 250) }
+  ];
 
   for (const item of engineCases) {
-    const [id] = item.entry;
-    const cfg = await configLoader.load(id, '1.0');
-    const url = urls[0];
-    const env = new Environment('BENCH', makeMeta(url, item.type));
+    const cfg = await configLoader.load(item.target.id, '1.0');
+    const env = new Environment('BENCH', makeMeta(item.target.url, item.target.contentType));
     const engine = new VipEngine(env, 'BENCH');
+    report.engine[item.label] = printResult('engine', `${item.label} x${COUNTS.engine}`, await benchAsync(`engine ${item.label} x${COUNTS.engine}`, async () => {
+      for (let i = 0; i < COUNTS.engine; i++) {
+        await engine.process(item.body, cfg);
+      }
+    }), COUNTS.engine);
 
     if (item.label === 'json') {
-      const coldJson = await benchAsync('engine json cold x50', async () => {
-        for (let i = 0; i < 50; i++) {
-          const coldCfg = configLoader._prepareConfig(jsonRaw);
-          await engine.process(item.body, coldCfg);
-        }
-      }, 5);
-      print(coldJson);
-      report.engine.json_cold_x50 = summarize(coldJson);
-
-      const warmJson = await benchAsync('engine json warm x50', async () => {
-        for (let i = 0; i < 50; i++) {
-          await engine.process(item.body, cfg);
-        }
-      }, 5);
-      print(warmJson);
-      report.engine.json_warm_x50 = summarize(warmJson);
-
-      console.log('\n--- json profile breakdown ---');
-      const prepared = await buildJsonProfileCase(configLoader, id, item.body, env);
-      const parseOnly = bench('json parse-only x50', () => {
-        for (let i = 0; i < 50; i++) {
-          Utils.safeJsonParse(item.body);
-        }
-      }, 5);
-      print(parseOnly);
-      report.json_profile.parse_only_x50 = summarize(parseOnly);
+      console.log('\n--- json profile ---');
+      const processor = cfg._processor || null;
+      report.json_profile.parse_only = printResult('json', `parse-only x${COUNTS.jsonProfile}`, bench(`json parse-only x${COUNTS.jsonProfile}`, () => {
+        for (let i = 0; i < COUNTS.jsonProfile; i++) Utils.safeJsonParse(item.body);
+      }), COUNTS.jsonProfile);
 
       const originalObj = cloneJsonPayload(item.body);
-      const stringifyOriginal = bench('json stringify original x50', () => {
-        for (let i = 0; i < 50; i++) {
-          Utils.safeJsonStringify(originalObj);
-        }
-      }, 5);
-      print(stringifyOriginal);
-      report.json_profile.stringify_original_x50 = summarize(stringifyOriginal);
+      report.json_profile.stringify_original = printResult('json', `stringify-original x${COUNTS.jsonProfile}`, bench(`json stringify-original x${COUNTS.jsonProfile}`, () => {
+        for (let i = 0; i < COUNTS.jsonProfile; i++) Utils.safeJsonStringify(originalObj);
+      }), COUNTS.jsonProfile);
 
-      const stringifyOnly = bench('json stringify cloned x50', () => {
-        for (let i = 0; i < 50; i++) {
-          Utils.safeJsonStringify(cloneJsonPayload(item.body));
-        }
-      }, 5);
-      print(stringifyOnly);
-      report.json_profile.stringify_cloned_x50 = summarize(stringifyOnly);
+      report.json_profile.stringify_cloned = printResult('json', `stringify-cloned x${COUNTS.jsonProfile}`, bench(`json stringify-cloned x${COUNTS.jsonProfile}`, () => {
+        for (let i = 0; i < COUNTS.jsonProfile; i++) Utils.safeJsonStringify(cloneJsonPayload(item.body));
+      }), COUNTS.jsonProfile);
 
-      if (typeof prepared.processor === 'function') {
-        const processorOnly = bench('json processor-only x50', () => {
-          for (let i = 0; i < 50; i++) {
+      if (typeof processor === 'function') {
+        report.json_profile.processor_only = printResult('json', `processor-only x${COUNTS.jsonProfile}`, bench(`json processor-only x${COUNTS.jsonProfile}`, () => {
+          for (let i = 0; i < COUNTS.jsonProfile; i++) {
             const obj = cloneJsonPayload(item.body);
-            prepared.processor(obj, env);
+            processor(obj, env);
           }
-        }, 5);
-        print(processorOnly);
-        report.json_profile.processor_only_x50 = summarize(processorOnly);
+        }), COUNTS.jsonProfile);
 
-        const processorMutatedStringify = bench('json stringify after processor x50', () => {
-          for (let i = 0; i < 50; i++) {
+        report.json_profile.stringify_after_processor = printResult('json', `stringify-after-processor x${COUNTS.jsonProfile}`, bench(`json stringify-after-processor x${COUNTS.jsonProfile}`, () => {
+          for (let i = 0; i < COUNTS.jsonProfile; i++) {
             const obj = cloneJsonPayload(item.body);
-            const out = prepared.processor(obj, env);
+            const out = processor(obj, env);
             Utils.safeJsonStringify(out);
           }
-        }, 5);
-        print(processorMutatedStringify);
-        report.json_profile.stringify_after_processor_x50 = summarize(processorMutatedStringify);
+        }), COUNTS.jsonProfile);
       }
 
       const pf = createProcessorFactory('BENCH');
       const cp = createCompiler(pf);
-      const processorCases = makeProcessorBenchmarkCases(pf, cp);
+      const processorCases = makeProcessorBenchmarkCases(cp);
+      console.log('\n--- processor profile ---');
       for (const pCase of processorCases) {
-        const pRes = bench(`processor ${pCase.label} x50`, () => {
-          for (let i = 0; i < 50; i++) {
+        report.processor_profile[pCase.label] = printResult('processor', `${pCase.label} x${COUNTS.processor}`, bench(`processor ${pCase.label} x${COUNTS.processor}`, () => {
+          for (let i = 0; i < COUNTS.processor; i++) {
             const obj = cloneJsonPayload(item.body);
             pCase.processor(obj, env);
           }
-        }, 5);
-        print(pRes);
-        report.processor_profile[`${pCase.label}_x50`] = summarize(pRes);
+        }), COUNTS.processor);
       }
 
-      const fullChain = bench('json full-chain manual x50', () => {
-        for (let i = 0; i < 50; i++) {
+      report.json_profile.full_chain_manual = printResult('json', `full-chain-manual x${COUNTS.jsonProfile}`, bench(`json full-chain-manual x${COUNTS.jsonProfile}`, () => {
+        for (let i = 0; i < COUNTS.jsonProfile; i++) {
           let obj = Utils.safeJsonParse(item.body);
-          if (typeof prepared.processor === 'function') {
-            obj = prepared.processor(obj, env);
-          }
+          if (typeof processor === 'function') obj = processor(obj, env);
           Utils.safeJsonStringify(obj);
         }
-      }, 5);
-      print(fullChain);
-      report.json_profile.full_chain_manual_x50 = summarize(fullChain);
-      continue;
+      }), COUNTS.jsonProfile);
     }
-
-    const result = await benchAsync(`engine ${item.label} x50`, async () => {
-      for (let i = 0; i < 50; i++) {
-        await engine.process(item.body, cfg);
-      }
-    }, 5);
-    print(result);
-    report.engine[`${item.label}_x50`] = summarize(result);
   }
 
-  const outPath = buildRuntimeReportPath();
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
-  console.log(`\n📄 runtime benchmark json: ${outPath}`);
-}
+  fs.mkdirSync(path.dirname(DIST_JSON_PATH), { recursive: true });
+  fs.writeFileSync(DIST_JSON_PATH, JSON.stringify(report, null, 2));
 
+  if (!FAST_MODE) {
+    fs.writeFileSync(DOC_MD_PATH, buildMarkdown(report));
+    console.log(`\n📄 runtime benchmark markdown: ${DOC_MD_PATH}`);
+  } else {
+    console.log('\nℹ️ fast 模式仅写 dist/benchmark-runtime.json；使用 --full 生成 docs/benchmark-runtime.md');
+  }
+
+  console.log(`📄 runtime benchmark json: ${DIST_JSON_PATH}`);
+}
 
 main().catch(err => {
   console.error(err);
