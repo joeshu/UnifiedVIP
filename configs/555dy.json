@@ -1,0 +1,49 @@
+{
+  "urlPattern": "^https?:\\/\\/(?:www\\.)?55[a-z0-9]+\\.shop\\/.*",
+  "mitmHosts": [
+    "www.55d6b4o1m2.shop",
+    "55d6b4o1m2.shop"
+  ],
+  "name": "555电影去广告",
+  "mode": "html",
+  "priority": 30,
+  "description": "555电影网页去广告 - 精确模式",
+  "htmlMarkers": [
+    "small-icon-container",
+    "data-encoded",
+    "d693d6351"
+  ],
+  "htmlReplacements": [
+    {
+      "pattern": "<div[^>]*class=[\"'][^\"']*small-icon-container[^\"']*[\"'][^>]*>[\\s\\S]*?<\\/div>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "<script[^>]*data-encoded[\\s\\S]*?<\\/script>",
+      "replacement": "",
+      "flags": "gi"
+    },
+    {
+      "pattern": "<script[^>]*id=[\"']d693d6351[\"'][^>]*>[\\s\\S]*?<\\/script>",
+      "replacement": "",
+      "flags": "gi"
+    }
+  ],
+  "blockHosts": [
+    "3d-platform-pro.obs.cn-south-1.myhuaweicloud.com",
+    "hljbrsn1gj.qiaozhixuexiao.com",
+    "ajgvkj1jsv.shenglinyiyang.cn",
+    "ingest.twlrih.cn",
+    "48023391.com",
+    "66321539.com",
+    "81680565.com",
+    "32256855.com",
+    "32480788.com",
+    "55kp1.com",
+    "5dd10.com",
+    "y.ewdegdwjnfedfdldtk12377.cn",
+    "04165573.com",
+    "d1.550375.vip"
+  ]
+}
