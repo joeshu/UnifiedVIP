@@ -11,13 +11,19 @@ function compileValueSetterMap(fields) {
   return Object.entries(fields || {}).map(([path, value]) => ({
     tokens: Utils.compilePath(path),
     value,
-    isTemplate: typeof value === 'string' && value.includes('{{')
+    isTemplate: typeof value === 'string' && value.includes('{{'),
+    isDirectKey: typeof path === 'string' && path.length > 0 && path.indexOf('.') < 0 && path.indexOf('[') < 0,
+    directKey: typeof path === 'string' && path.length > 0 && path.indexOf('.') < 0 && path.indexOf('[') < 0 ? path : null
   }));
 }
 
 function applyCompiledValueSetters(target, compiled, sourceObj) {
   for (const item of compiled) {
     const value = item.isTemplate ? Utils.resolveTemplate(item.value, sourceObj) : item.value;
+    if (item.isDirectKey && item.directKey) {
+      target[item.directKey] = value;
+      continue;
+    }
     Utils.setPath(target, item.tokens, value);
   }
 }
@@ -117,9 +123,22 @@ function createProcessorFactory(requestId) {
   return {
     setFields: (params) => {
       const compiled = compileValueSetterMap(params.fields || {});
+      const directStatic = compiled.filter(item => item.isDirectKey && item.directKey && !item.isTemplate);
+      const directTemplate = compiled.filter(item => item.isDirectKey && item.directKey && item.isTemplate);
+      const complex = compiled.filter(item => !item.isDirectKey || !item.directKey);
 
       return (obj, env) => {
-        applyCompiledValueSetters(obj, compiled, obj);
+        for (const item of directStatic) {
+          obj[item.directKey] = item.value;
+        }
+
+        for (const item of directTemplate) {
+          obj[item.directKey] = Utils.resolveTemplate(item.value, obj);
+        }
+
+        if (complex.length > 0) {
+          applyCompiledValueSetters(obj, complex, obj);
+        }
         return obj;
       };
     },
@@ -127,14 +146,28 @@ function createProcessorFactory(requestId) {
     mapArray: (params) => {
       const arrPathTokens = Utils.compilePath(params.path);
       const compiled = compileValueSetterMap(params.fields || {});
+      const directStatic = compiled.filter(item => item.isDirectKey && item.directKey && !item.isTemplate);
+      const directTemplate = compiled.filter(item => item.isDirectKey && item.directKey && item.isTemplate);
+      const complex = compiled.filter(item => !item.isDirectKey || !item.directKey);
 
       return (obj, env) => {
         const arr = Utils.getPath(obj, arrPathTokens);
         if (!Array.isArray(arr)) return obj;
 
         for (const itemObj of arr) {
-          if (!itemObj) continue;
-          applyCompiledValueSetters(itemObj, compiled, itemObj);
+          if (!itemObj || typeof itemObj !== 'object') continue;
+
+          for (const item of directStatic) {
+            itemObj[item.directKey] = item.value;
+          }
+
+          for (const item of directTemplate) {
+            itemObj[item.directKey] = Utils.resolveTemplate(item.value, itemObj);
+          }
+
+          if (complex.length > 0) {
+            applyCompiledValueSetters(itemObj, complex, itemObj);
+          }
         }
         return obj;
       };

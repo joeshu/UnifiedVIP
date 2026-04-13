@@ -1,0 +1,84 @@
+{
+  "_shared": [
+    "apis.lifeweek.com.cn",
+    "pagead*.googlesyndication.com"
+  ],
+  "bohe": [
+    "du.baicizhan.com"
+  ],
+  "bxkt": [
+    "api.banxueketang.com"
+  ],
+  "foday": [
+    "apis.folidaymall.com"
+  ],
+  "gps": [
+    "service.gpstool.com"
+  ],
+  "iappdaily": [
+    "api.iappdaily.com"
+  ],
+  "ipalfish": [
+    "*.ipalfish.com"
+  ],
+  "juyeye": [
+    "59.82.99.78",
+    "juyeye.cc",
+    "*.juyeye.cc"
+  ],
+  "kada": [
+    "service.hhdd.com"
+  ],
+  "keep": [
+    "api.gotokeep.com",
+    "kit.gotokeep.com",
+    "*.gotokeep.*"
+  ],
+  "kyxq": [
+    "mapi.kouyuxingqiu.com"
+  ],
+  "mingcalc": [
+    "jsq.mingcalc.cn"
+  ],
+  "qiujingapp": [
+    "gateway-api.yizhilive.com"
+  ],
+  "sylangyue": [
+    "theater-api.sylangyue.xyz"
+  ],
+  "tophub": [
+    "api2.tophub.app",
+    "api2.tophub.today",
+    "api3.tophub.app",
+    "api3.tophub.today",
+    "api3.tophub.xyz",
+    "tophub.iappdaiy.com",
+    "tophub.idaily.today",
+    "tophub.ipadown.com",
+    "tophub.remai.today",
+    "tophub.tophubdata.com",
+    "tophub2.idaily.today",
+    "tophub2.tophubdata.com"
+  ],
+  "tv": [
+    "101.42.124.*",
+    "120.53.74.*",
+    "162.14.5.*",
+    "42.187.199.*",
+    "cfvip.*.com",
+    "yz0320.*.com",
+    "yz1018.*.com",
+    "yz250907.*.com",
+    "yzy0916.*.com"
+  ],
+  "v2ex": [
+    "v2ex.com",
+    "*.v2ex.com"
+  ],
+  "vvebo": [
+    "fluxapi.vvebo.vip"
+  ],
+  "wohome": [
+    "iotpservice.smartont.net"
+  ]
+}

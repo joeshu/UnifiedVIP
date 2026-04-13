@@ -18,7 +18,6 @@ async function main() {
   const name = await question('显示名称 (如"新应用"): ');
   const domain = await question('主域名 (如api.newapp.com): ');
   const apiPath = await question('API路径 (如/vip/info，可选): ') || '/.*';
-  
   console.log('\n📋 处理模式:');
   console.log('  1. json    - JSON字段修改（最常用）');
   console.log('  2. regex   - 正则替换文本');
@@ -40,12 +39,16 @@ async function main() {
   
   // 更新注册表
   await updateRegistry(appId, config);
+  ensureManualGroup(appId);
   
   console.log(`\n✅ APP "${name}" 创建成功！`);
   console.log(`\n📁 已更新: src/apps/_index.js`);
+  console.log(`📁 已初始化: rules/mitm-manual.json -> ${appId}: []`);
   console.log(`\n📝 下一步：`);
-  console.log('   npm run build    # 构建并生成配置文件');
-  console.log('   npm run deploy   # 发布到GitHub Pages');
+  console.log('   1) 补全 configs/' + appId + '.json 或迁移到当前 configs 主流程');
+  console.log('   2) 如有动态/兜底 host，填入 rules/mitm-manual.json 的 ' + appId + ' 分组');
+  console.log('   3) npm run mitm:normalize && npm run check:mitm:manual');
+  console.log('   4) npm run build');
   
   rl.close();
 }
@@ -112,12 +115,34 @@ function generateConfig(mode, name, domain, apiPath, priority, description) {
       
     case 'html':
       base.config.htmlReplacements = [
-        { pattern: "<div[^>]*class=\\"[^\\"]*ad[^\\"]*\\"[^>]*>[\\s\\S]*?<\\/div>", replacement: "", flags: "gi" }
+        { pattern: "<div[^>]*class=\\\"[^\\\"]*ad[^\\\"]*\\\"[^>]*>[\\s\\S]*?<\\/div>", replacement: "", flags: "gi" }
       ];
       break;
   }
   
   return base;
+}
+
+function ensureManualGroup(appId) {
+  const manualJsonPath = path.join(__dirname, '../rules/mitm-manual.json');
+  if (!fs.existsSync(manualJsonPath)) {
+    fs.writeFileSync(manualJsonPath, JSON.stringify({ _shared: [] }, null, 2) + '\n');
+  }
+
+  const raw = fs.readFileSync(manualJsonPath, 'utf8');
+  const parsed = JSON.parse(raw);
+
+  if (!parsed._shared || !Array.isArray(parsed._shared)) parsed._shared = [];
+  if (!parsed[appId] || !Array.isArray(parsed[appId])) parsed[appId] = [];
+
+  const sortedKeys = Object.keys(parsed).sort((a, b) => {
+    if (a === '_shared') return -1;
+    if (b === '_shared') return 1;
+    return a.localeCompare(b);
+  });
+  const out = {};
+  sortedKeys.forEach(key => { out[key] = parsed[key]; });
+  fs.writeFileSync(manualJsonPath, JSON.stringify(out, null, 2) + '\n');
 }
 
 async function updateRegistry(appId, config) {

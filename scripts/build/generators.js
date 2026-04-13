@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const MANUAL_MITM_HOSTS_PATH = path.join(__dirname, '../../rules/mitm-manual.txt');
+const MANUAL_MITM_HOSTS_JSON_PATH = path.join(__dirname, '../../rules/mitm-manual.json');
 
 function readLineList(filePath) {
   if (!fs.existsSync(filePath)) return [];
@@ -10,6 +11,44 @@ function readLineList(filePath) {
     .split('\n')
     .map(s => s.trim())
     .filter(s => s && !s.startsWith('#'));
+}
+
+function normalizeMitmHost(host) {
+  return String(host || '').trim().toLowerCase();
+}
+
+function sortMitmHosts(hosts) {
+  return [...hosts].sort((a, b) => {
+    const aw = a.includes('*') ? 1 : 0;
+    const bw = b.includes('*') ? 1 : 0;
+    if (aw !== bw) return aw - bw;
+    const ad = a.split('.').length;
+    const bd = b.split('.').length;
+    if (ad !== bd) return bd - ad;
+    return a.localeCompare(b);
+  });
+}
+
+function readManualMitmHosts() {
+  if (fs.existsSync(MANUAL_MITM_HOSTS_JSON_PATH)) {
+    const raw = fs.readFileSync(MANUAL_MITM_HOSTS_JSON_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const entries = [];
+
+    for (const [group, hosts] of Object.entries(parsed || {})) {
+      if (!Array.isArray(hosts)) continue;
+      const source = group === '_shared' ? 'manual:shared' : `manual:${group}`;
+      const normalizedHosts = sortMitmHosts(Array.from(new Set(hosts.map(normalizeMitmHost).filter(Boolean))));
+      normalizedHosts.forEach(host => entries.push({ host, source }));
+    }
+
+    return entries;
+  }
+
+  return readLineList(MANUAL_MITM_HOSTS_PATH)
+    .map(normalizeMitmHost)
+    .filter(Boolean)
+    .map(host => ({ host, source: 'manual:file' }));
 }
 
 function generateHeaderMinified({ BUILD_CONFIG, APP_REGISTRY }) {
@@ -271,8 +310,9 @@ function generateRewriteConf({ BUILD_CONFIG, APP_REGISTRY, getAllConfigs, RULES_
     }
   }
 
-  const manualHosts = readLineList(MANUAL_MITM_HOSTS_PATH);
-  manualHosts.forEach(h => addHostWithSource(h, 'manual:file'));
+  const manualHostEntries = readManualMitmHosts();
+  const manualHosts = manualHostEntries.map(entry => entry.host);
+  manualHostEntries.forEach(entry => addHostWithSource(entry.host, entry.source));
 
   const observedHostsPath = path.join(RULES_DIR, 'mitm-observed.txt');
   if (fs.existsSync(observedHostsPath)) {

@@ -146,6 +146,91 @@ function pickBenchConfigs() {
   };
 }
 
+function cloneJsonPayload(jsonStr) {
+  return JSON.parse(jsonStr);
+}
+
+function buildJsonProfileCase(configLoader, jsonId, jsonBody, env) {
+  return configLoader.load(jsonId, '1.0').then(cfg => {
+    const engine = new VipEngine(env, 'BENCH');
+    const processor = cfg._processor || null;
+    return { cfg, engine, processor };
+  });
+}
+
+function makeProcessorBenchmarkCases(factory, compile) {
+  const cases = [];
+
+  cases.push({
+    label: 'setFields',
+    processor: compile({
+      processor: 'setFields',
+      params: {
+        fields: {
+          'data.vip': true,
+          'data.level': 9,
+          'data.expire': 9999999999
+        }
+      }
+    })
+  });
+
+  cases.push({
+    label: 'mapArray',
+    processor: compile({
+      processor: 'mapArray',
+      params: {
+        path: 'data.list',
+        fields: {
+          flag: true,
+          badge: 'vip'
+        }
+      }
+    })
+  });
+
+  cases.push({
+    label: 'deleteFields',
+    processor: compile({
+      processor: 'deleteFields',
+      params: {
+        paths: ['data.list[0].name', 'data.level']
+      }
+    })
+  });
+
+  cases.push({
+    label: 'compose',
+    processor: compile({
+      processor: 'compose',
+      params: {
+        steps: [
+          {
+            processor: 'setFields',
+            params: {
+              fields: {
+                'data.vip': true,
+                'data.level': 9
+              }
+            }
+          },
+          {
+            processor: 'mapArray',
+            params: {
+              path: 'data.list',
+              fields: {
+                flag: true
+              }
+            }
+          }
+        ]
+      }
+    })
+  });
+
+  return cases.filter(item => typeof item.processor === 'function');
+}
+
 async function main() {
   console.log('=== UnifiedVIP Runtime Benchmark ===');
   console.log(`manifest configs=${Object.keys(BUILTIN_MANIFEST_OBJ.configs || {}).length}`);
@@ -154,7 +239,9 @@ async function main() {
     generated_at: new Date().toISOString(),
     manifest: {},
     config_loader: {},
-    engine: {}
+    engine: {},
+    json_profile: {},
+    processor_profile: {}
   };
 
   const manifestLoader = new SimpleManifestLoader('BENCH');
@@ -244,6 +331,80 @@ async function main() {
       }, 5);
       print(warmJson);
       report.engine.json_warm_x50 = summarize(warmJson);
+
+      console.log('\n--- json profile breakdown ---');
+      const prepared = await buildJsonProfileCase(configLoader, id, item.body, env);
+      const parseOnly = bench('json parse-only x50', () => {
+        for (let i = 0; i < 50; i++) {
+          Utils.safeJsonParse(item.body);
+        }
+      }, 5);
+      print(parseOnly);
+      report.json_profile.parse_only_x50 = summarize(parseOnly);
+
+      const originalObj = cloneJsonPayload(item.body);
+      const stringifyOriginal = bench('json stringify original x50', () => {
+        for (let i = 0; i < 50; i++) {
+          Utils.safeJsonStringify(originalObj);
+        }
+      }, 5);
+      print(stringifyOriginal);
+      report.json_profile.stringify_original_x50 = summarize(stringifyOriginal);
+
+      const stringifyOnly = bench('json stringify cloned x50', () => {
+        for (let i = 0; i < 50; i++) {
+          Utils.safeJsonStringify(cloneJsonPayload(item.body));
+        }
+      }, 5);
+      print(stringifyOnly);
+      report.json_profile.stringify_cloned_x50 = summarize(stringifyOnly);
+
+      if (typeof prepared.processor === 'function') {
+        const processorOnly = bench('json processor-only x50', () => {
+          for (let i = 0; i < 50; i++) {
+            const obj = cloneJsonPayload(item.body);
+            prepared.processor(obj, env);
+          }
+        }, 5);
+        print(processorOnly);
+        report.json_profile.processor_only_x50 = summarize(processorOnly);
+
+        const processorMutatedStringify = bench('json stringify after processor x50', () => {
+          for (let i = 0; i < 50; i++) {
+            const obj = cloneJsonPayload(item.body);
+            const out = prepared.processor(obj, env);
+            Utils.safeJsonStringify(out);
+          }
+        }, 5);
+        print(processorMutatedStringify);
+        report.json_profile.stringify_after_processor_x50 = summarize(processorMutatedStringify);
+      }
+
+      const pf = createProcessorFactory('BENCH');
+      const cp = createCompiler(pf);
+      const processorCases = makeProcessorBenchmarkCases(pf, cp);
+      for (const pCase of processorCases) {
+        const pRes = bench(`processor ${pCase.label} x50`, () => {
+          for (let i = 0; i < 50; i++) {
+            const obj = cloneJsonPayload(item.body);
+            pCase.processor(obj, env);
+          }
+        }, 5);
+        print(pRes);
+        report.processor_profile[`${pCase.label}_x50`] = summarize(pRes);
+      }
+
+      const fullChain = bench('json full-chain manual x50', () => {
+        for (let i = 0; i < 50; i++) {
+          let obj = Utils.safeJsonParse(item.body);
+          if (typeof prepared.processor === 'function') {
+            obj = prepared.processor(obj, env);
+          }
+          Utils.safeJsonStringify(obj);
+        }
+      }, 5);
+      print(fullChain);
+      report.json_profile.full_chain_manual_x50 = summarize(fullChain);
       continue;
     }
 
