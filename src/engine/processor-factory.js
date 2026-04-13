@@ -1,6 +1,13 @@
 // src/engine/processor-factory.js
 // 处理器工厂 - 创建各类处理器
 
+function markProcessor(processor, meta = {}) {
+  if (typeof processor === 'function') {
+    processor.__uvipMeta = Object.assign({}, processor.__uvipMeta || {}, meta);
+  }
+  return processor;
+}
+
 function sendNotify(title, subtitle, message, options) {
   if (typeof $notify !== 'undefined') {
     $notify(title, subtitle, message, options || {});
@@ -142,7 +149,7 @@ function createProcessorFactory(requestId) {
       const directTemplate = compiled.filter(item => item.isDirectKey && item.directKey && item.isTemplate);
       const complex = compiled.filter(item => !item.isDirectKey || !item.directKey);
 
-      return (obj, env) => {
+      return markProcessor((obj, env) => {
         for (const item of directStatic) {
           obj[item.directKey] = item.value;
         }
@@ -155,7 +162,7 @@ function createProcessorFactory(requestId) {
           applyCompiledValueSetters(obj, complex, obj);
         }
         return obj;
-      };
+      }, { mutates: true, kind: 'setFields' });
     },
 
     mapArray: (params) => {
@@ -168,7 +175,7 @@ function createProcessorFactory(requestId) {
       const staticLen = directStatic.length;
       const templateLen = directTemplate.length;
 
-      return (obj, env) => {
+      return markProcessor((obj, env) => {
         const arr = Utils.getPath(obj, arrPathTokens);
         if (!Array.isArray(arr)) return obj;
 
@@ -203,7 +210,7 @@ function createProcessorFactory(requestId) {
           }
         }
         return obj;
-      };
+      }, { mutates: true, kind: 'mapArray' });
     },
 
     filterArray: (params) => {
@@ -241,7 +248,7 @@ function createProcessorFactory(requestId) {
         };
       }).filter(Boolean);
 
-      return (obj, env) => {
+      return markProcessor((obj, env) => {
         for (const item of compiledPaths) {
           const parent = item.parentTokens ? Utils.getPath(obj, item.parentTokens) : obj;
           if (!parent || typeof parent !== 'object') continue;
@@ -263,7 +270,7 @@ function createProcessorFactory(requestId) {
           }
         }
         return obj;
-      };
+      }, { mutates: true, kind: 'deleteFields' });
     },
 
     sliceArray: (params) => {
@@ -340,15 +347,17 @@ function createProcessorFactory(requestId) {
         throw new Error(`Too many processors: ${steps.length}`);
       }
       const processors = steps.map(step => compile(step)).filter(Boolean);
+      const allMutates = processors.length > 0 && processors.every(p => p && p.__uvipMeta && p.__uvipMeta.mutates === true);
 
-      return (obj, env) => {
+      return markProcessor((obj, env) => {
         let result = obj;
-        for (const processor of processors) {
+        for (let i = 0; i < processors.length; i++) {
+          const processor = processors[i];
           if (!result) break;
           result = processor(result, env);
         }
         return result;
-      };
+      }, { mutates: allMutates, kind: 'compose', stepCount: processors.length });
     },
 
     when: (params, compile) => {
